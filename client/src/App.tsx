@@ -11,6 +11,16 @@ import { TimelineView } from './components/timeline/TimelineView';
 import { DashboardView } from './components/dashboard/DashboardView';
 import type { ViewType } from './types';
 
+// TaskProviderWrapper - provides TaskProvider at Layout level so Layout can use useTasks()
+const TaskProviderWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentProject } = useProjects();
+  return (
+    <TaskProvider projectId={currentProject?.id}>
+      {children}
+    </TaskProvider>
+  );
+};
+
 // Placeholder view components - these will be implemented in future tasks
 const PlaceholderView: React.FC<{ view: ViewType }> = ({ view }) => {
   const { currentProject } = useProjects();
@@ -135,11 +145,7 @@ const ProjectViewWrapper: React.FC<{ view: ViewType }> = ({ view }) => {
     }
   };
   
-  return (
-    <TaskProvider projectId={currentProject?.id}>
-      {renderView()}
-    </TaskProvider>
-  );
+  return renderView();
 };
 
 // Main App Content
@@ -167,9 +173,11 @@ const AppContent: React.FC = () => {
           projects.length > 0 ? (
             <Navigate to={`/projects/${projects[0].id}/kanban`} replace />
           ) : (
-            <Layout>
-              <ProjectViewWrapper view="kanban" />
-            </Layout>
+            <TaskProviderWrapper>
+              <Layout>
+                <ProjectViewWrapper view="kanban" />
+              </Layout>
+            </TaskProviderWrapper>
           )
         }
       />
@@ -178,41 +186,51 @@ const AppContent: React.FC = () => {
       <Route
         path="/projects/:projectId/kanban"
         element={
-          <Layout>
-            <ProjectViewWrapper view="kanban" />
-          </Layout>
+          <TaskProviderWrapper>
+            <Layout>
+              <ProjectViewWrapper view="kanban" />
+            </Layout>
+          </TaskProviderWrapper>
         }
       />
       <Route
         path="/projects/:projectId/list"
         element={
-          <Layout>
-            <ProjectViewWrapper view="list" />
-          </Layout>
+          <TaskProviderWrapper>
+            <Layout>
+              <ProjectViewWrapper view="list" />
+            </Layout>
+          </TaskProviderWrapper>
         }
       />
       <Route
         path="/projects/:projectId/calendar"
         element={
-          <Layout>
-            <ProjectViewWrapper view="calendar" />
-          </Layout>
+          <TaskProviderWrapper>
+            <Layout>
+              <ProjectViewWrapper view="calendar" />
+            </Layout>
+          </TaskProviderWrapper>
         }
       />
       <Route
         path="/projects/:projectId/timeline"
         element={
-          <Layout>
-            <ProjectViewWrapper view="timeline" />
-          </Layout>
+          <TaskProviderWrapper>
+            <Layout>
+              <ProjectViewWrapper view="timeline" />
+            </Layout>
+          </TaskProviderWrapper>
         }
       />
       <Route
         path="/projects/:projectId/dashboard"
         element={
-          <Layout>
-            <ProjectViewWrapper view="dashboard" />
-          </Layout>
+          <TaskProviderWrapper>
+            <Layout>
+              <ProjectViewWrapper view="dashboard" />
+            </Layout>
+          </TaskProviderWrapper>
         }
       />
       
