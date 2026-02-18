@@ -4,9 +4,9 @@ import { CSS } from '@dnd-kit/utilities';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format } from 'date-fns';
-import { Calendar } from 'lucide-react';
+import { Calendar, Users } from 'lucide-react';
 import type { Task, TaskPriority } from '../../types';
-import { PriorityBadge } from '../common/Badge';
+import { PriorityBadge, TagBadge } from '../common/Badge';
 
 interface TaskCardProps {
   task: Task;
@@ -61,6 +61,15 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
   };
 
   const isOverdue = task.due_date && new Date(task.due_date) < new Date();
+  
+  // Get assignee info
+  const primaryAssignee = task.assignee;
+  const coAssigneeCount = task.coAssignees?.length || 0;
+  const totalAssignees = (primaryAssignee ? 1 : 0) + coAssigneeCount;
+  
+  // Get first few tags (max 3 visible)
+  const visibleTags = task.tags?.slice(0, 3) || [];
+  const remainingTagCount = (task.tags?.length || 0) - visibleTags.length;
 
   return (
     <div
@@ -104,6 +113,27 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
           {task.title}
         </h3>
 
+        {/* Tags - Show above meta info if present */}
+        {visibleTags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 mb-2">
+            {visibleTags.map((taskTag) => (
+              taskTag.tag && (
+                <TagBadge
+                  key={taskTag.id}
+                  tag={taskTag.tag}
+                  size="sm"
+                  className="text-[10px]"
+                />
+              )
+            ))}
+            {remainingTagCount > 0 && (
+              <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                +{remainingTagCount}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Meta info */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Priority badge */}
@@ -122,6 +152,34 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
               <Calendar className="w-3 h-3" aria-hidden="true" />
               {formatDate(task.due_date)}
             </span>
+          )}
+
+          {/* Assignees */}
+          {totalAssignees > 0 && (
+            <div className="flex items-center gap-1 ml-auto">
+              {/* Primary assignee avatar */}
+              {primaryAssignee && (
+                <div
+                  className="w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center"
+                  title={primaryAssignee.name}
+                >
+                  <span className="text-primary-600 dark:text-primary-400 text-[10px] font-medium">
+                    {primaryAssignee.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )}
+              
+              {/* Co-assignee count indicator */}
+              {coAssigneeCount > 0 && (
+                <div
+                  className="flex items-center gap-0.5 text-xs text-gray-500 dark:text-gray-400"
+                  title={`${coAssigneeCount} co-assignee${coAssigneeCount > 1 ? 's' : ''}`}
+                >
+                  <Users className="w-3 h-3" aria-hidden="true" />
+                  <span>{coAssigneeCount}</span>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

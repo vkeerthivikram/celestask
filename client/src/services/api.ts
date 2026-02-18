@@ -1,10 +1,18 @@
 import type {
   Project,
   Task,
+  Person,
+  Tag,
+  TaskAssignee,
+  TaskTag,
   CreateProjectDTO,
   UpdateProjectDTO,
   CreateTaskDTO,
   UpdateTaskDTO,
+  CreatePersonDTO,
+  UpdatePersonDTO,
+  CreateTagDTO,
+  UpdateTagDTO,
   TaskFilters,
   ApiResponse,
 } from '../types';
@@ -44,6 +52,12 @@ function buildQueryString(filters?: TaskFilters): string {
   }
   if (filters.search) {
     params.append('search', filters.search);
+  }
+  if (filters.assignee_id !== undefined) {
+    params.append('assignee_id', filters.assignee_id.toString());
+  }
+  if (filters.tag_id !== undefined) {
+    params.append('tag_id', filters.tag_id.toString());
   }
   
   const queryString = params.toString();
@@ -149,6 +163,149 @@ export async function deleteTask(id: number): Promise<void> {
   await handleResponse<{ message: string }>(response);
 }
 
+// Task Assignees API
+export async function getTaskAssignees(taskId: number): Promise<TaskAssignee[]> {
+  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/assignees`);
+  return handleResponse<TaskAssignee[]>(response);
+}
+
+export async function addTaskAssignee(taskId: number, data: { person_id: number; role?: string }): Promise<TaskAssignee> {
+  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/assignees`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<TaskAssignee>(response);
+}
+
+export async function removeTaskAssignee(taskId: number, personId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/assignees/${personId}`, {
+    method: 'DELETE',
+  });
+  await handleResponse<{ message: string }>(response);
+}
+
+export async function setPrimaryAssignee(taskId: number, assigneeId: number): Promise<Task> {
+  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/assignee`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ assignee_id: assigneeId }),
+  });
+  return handleResponse<Task>(response);
+}
+
+// Task Tags API
+export async function getTaskTags(taskId: number): Promise<TaskTag[]> {
+  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/tags`);
+  return handleResponse<TaskTag[]>(response);
+}
+
+export async function addTaskTag(taskId: number, tagId: number): Promise<TaskTag> {
+  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/tags`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ tag_id: tagId }),
+  });
+  return handleResponse<TaskTag>(response);
+}
+
+export async function removeTaskTag(taskId: number, tagId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/tags/${tagId}`, {
+    method: 'DELETE',
+  });
+  await handleResponse<{ message: string }>(response);
+}
+
+// ============ People API ============
+
+export async function getPeople(projectId?: number): Promise<Person[]> {
+  const queryString = projectId ? `?project_id=${projectId}` : '';
+  const response = await fetch(`${API_BASE_URL}/people${queryString}`);
+  return handleResponse<Person[]>(response);
+}
+
+export async function getPerson(id: number): Promise<Person> {
+  const response = await fetch(`${API_BASE_URL}/people/${id}`);
+  return handleResponse<Person>(response);
+}
+
+export async function createPerson(data: CreatePersonDTO): Promise<Person> {
+  const response = await fetch(`${API_BASE_URL}/people`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<Person>(response);
+}
+
+export async function updatePerson(id: number, data: UpdatePersonDTO): Promise<Person> {
+  const response = await fetch(`${API_BASE_URL}/people/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<Person>(response);
+}
+
+export async function deletePerson(id: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/people/${id}`, {
+    method: 'DELETE',
+  });
+  await handleResponse<{ message: string }>(response);
+}
+
+// ============ Tags API ============
+
+export async function getTags(projectId?: number): Promise<Tag[]> {
+  const queryString = projectId ? `?project_id=${projectId}` : '';
+  const response = await fetch(`${API_BASE_URL}/tags${queryString}`);
+  return handleResponse<Tag[]>(response);
+}
+
+export async function getTag(id: number): Promise<Tag> {
+  const response = await fetch(`${API_BASE_URL}/tags/${id}`);
+  return handleResponse<Tag>(response);
+}
+
+export async function createTag(data: CreateTagDTO): Promise<Tag> {
+  const response = await fetch(`${API_BASE_URL}/tags`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<Tag>(response);
+}
+
+export async function updateTag(id: number, data: UpdateTagDTO): Promise<Tag> {
+  const response = await fetch(`${API_BASE_URL}/tags/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<Tag>(response);
+}
+
+export async function deleteTag(id: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/tags/${id}`, {
+    method: 'DELETE',
+  });
+  await handleResponse<{ message: string }>(response);
+}
+
 // Export all functions as a unified API object
 export const api = {
   projects: {
@@ -166,6 +323,27 @@ export const api = {
     update: updateTask,
     updateStatus: updateTaskStatus,
     delete: deleteTask,
+    getAssignees: getTaskAssignees,
+    addAssignee: addTaskAssignee,
+    removeAssignee: removeTaskAssignee,
+    setPrimaryAssignee: setPrimaryAssignee,
+    getTags: getTaskTags,
+    addTag: addTaskTag,
+    removeTag: removeTaskTag,
+  },
+  people: {
+    getAll: getPeople,
+    getOne: getPerson,
+    create: createPerson,
+    update: updatePerson,
+    delete: deletePerson,
+  },
+  tags: {
+    getAll: getTags,
+    getOne: getTag,
+    create: createTag,
+    update: updateTag,
+    delete: deleteTag,
   },
 };
 

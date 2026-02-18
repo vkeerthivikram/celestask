@@ -9,6 +9,8 @@ const { seedDatabase } = require('./db/seed');
 // Import routes
 const projectsRouter = require('./routes/projects');
 const tasksRouter = require('./routes/tasks');
+const peopleRouter = require('./routes/people');
+const tagsRouter = require('./routes/tags');
 
 // Initialize Express app
 const app = express();
@@ -41,6 +43,8 @@ try {
 // API Routes
 app.use('/api/projects', projectsRouter);
 app.use('/api/tasks', tasksRouter);
+app.use('/api/people', peopleRouter);
+app.use('/api/tags', tagsRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

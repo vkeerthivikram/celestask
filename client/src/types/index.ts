@@ -5,7 +5,7 @@ export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 // View Types
-export type ViewType = 'kanban' | 'list' | 'calendar' | 'timeline' | 'dashboard';
+export type ViewType = 'kanban' | 'list' | 'calendar' | 'timeline' | 'dashboard' | 'people';
 
 // Project Interface
 export interface Project {
@@ -15,6 +15,47 @@ export interface Project {
   color: string;
   created_at: string;
   updated_at: string;
+}
+
+// Person Interface
+export interface Person {
+  id: number;
+  name: string;
+  email?: string;
+  company?: string;
+  designation?: string;
+  project_id?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Tag Interface
+export interface Tag {
+  id: number;
+  name: string;
+  color: string;
+  project_id?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Task Assignee Interface (for co-assignees)
+export interface TaskAssignee {
+  id: number;
+  task_id: number;
+  person_id: number;
+  role: string;
+  person?: Person;
+  created_at: string;
+}
+
+// Task Tag Interface
+export interface TaskTag {
+  id: number;
+  task_id: number;
+  tag_id: number;
+  tag?: Tag;
+  created_at: string;
 }
 
 // Task Interface
@@ -27,6 +68,10 @@ export interface Task {
   priority: TaskPriority;
   due_date: string | null;
   start_date: string | null;
+  assignee_id?: number;
+  assignee?: Person;
+  coAssignees?: TaskAssignee[];
+  tags?: TaskTag[];
   created_at: string;
   updated_at: string;
 }
@@ -44,6 +89,34 @@ export interface UpdateProjectDTO {
   color?: string;
 }
 
+export interface CreatePersonDTO {
+  name: string;
+  email?: string;
+  company?: string;
+  designation?: string;
+  project_id?: number;
+}
+
+export interface UpdatePersonDTO {
+  name?: string;
+  email?: string;
+  company?: string;
+  designation?: string;
+  project_id?: number;
+}
+
+export interface CreateTagDTO {
+  name: string;
+  color?: string;
+  project_id?: number;
+}
+
+export interface UpdateTagDTO {
+  name?: string;
+  color?: string;
+  project_id?: number;
+}
+
 export interface CreateTaskDTO {
   project_id: number;
   title: string;
@@ -52,6 +125,7 @@ export interface CreateTaskDTO {
   priority?: TaskPriority;
   due_date?: string | null;
   start_date?: string | null;
+  assignee_id?: number;
 }
 
 export interface UpdateTaskDTO {
@@ -61,6 +135,7 @@ export interface UpdateTaskDTO {
   priority?: TaskPriority;
   due_date?: string | null;
   start_date?: string | null;
+  assignee_id?: number;
 }
 
 // Task Filters
@@ -71,6 +146,8 @@ export interface TaskFilters {
   due_date_from?: string;
   due_date_to?: string;
   search?: string;
+  assignee_id?: number;
+  tag_id?: number;
 }
 
 // API Response Types

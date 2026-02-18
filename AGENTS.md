@@ -7,12 +7,13 @@
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Agents Used](#agents-used)
-3. [Workflow Diagram](#workflow-diagram)
-4. [Detailed Agent Contributions](#detailed-agent-contributions)
-5. [Key Decisions Made](#key-decisions-made)
-6. [Token/Time Estimates](#tokentime-estimates)
-7. [Lessons Learned](#lessons-learned)
+2. [Feature Updates](#feature-updates)
+3. [Agents Used](#agents-used)
+4. [Workflow Diagram](#workflow-diagram)
+5. [Detailed Agent Contributions](#detailed-agent-contributions)
+6. [Key Decisions Made](#key-decisions-made)
+7. [Token/Time Estimates](#tokentime-estimates)
+8. [Lessons Learned](#lessons-learned)
 
 ---
 
@@ -26,10 +27,163 @@
 - **Inspiration**: Similar to Jira but simplified for personal use
 - **Architecture**: Full-stack with Express backend and React frontend
 - **Database**: SQLite for local-first data storage
+- **Version**: v1.1.0
+
+### Key Features
+
+- **Project Management**: Create and organize projects with color coding
+- **Task Tracking**: Full task lifecycle with status, priority, and due dates
+- **People Management**: Contact management with project associations
+- **Task Assignments**: Primary assignee and co-assignees with roles
+- **Task Tags**: Categorize tasks with global or project-specific tags
+- **Multiple Views**: 6 views (Dashboard, Kanban, List, Calendar, Timeline, People)
 
 ### AI Collaboration Model
 
-The project was orchestrated through **Orchestrator Mode**, which coordinated five distinct subtasks assigned to specialized AI modes. Each mode contributed its expertise in a sequential workflow with clear dependencies.
+The project was orchestrated through **Orchestrator Mode**, which coordinated multiple distinct subtasks assigned to specialized AI modes. Each mode contributed its expertise in a sequential workflow with clear dependencies.
+
+---
+
+## Feature Updates
+
+### v1.1.0 - People, Tags & Assignees (2026-02-18)
+
+This update adds contact management and task assignment capabilities to TaskFlow.
+
+#### New Features
+
+| Feature | Description |
+|---------|-------------|
+| **People Management** | Create and manage contacts (not users) with name, email, company, designation, and project association |
+| **Task Assignments** | Set primary assignee and co-assignees with roles (collaborator, reviewer, observer) |
+| **Task Tags** | Categorize tasks with custom tags that can be global or project-specific |
+| **People View** | New dedicated view for managing contacts with search and filtering capabilities |
+
+#### Files Added
+
+| File | Purpose |
+|------|---------|
+| [`server/routes/people.js`](server/routes/people.js) | People CRUD API endpoints |
+| [`server/routes/tags.js`](server/routes/tags.js) | Tags CRUD API endpoints |
+| [`client/src/context/PeopleContext.tsx`](client/src/context/PeopleContext.tsx) | People state management context |
+| [`client/src/context/TagContext.tsx`](client/src/context/TagContext.tsx) | Tag state management context |
+| [`client/src/components/people/PeopleView.tsx`](client/src/components/people/PeopleView.tsx) | People management view component |
+| [`client/src/components/common/PersonForm.tsx`](client/src/components/common/PersonForm.tsx) | Person creation/edit form |
+| [`client/src/components/common/TagForm.tsx`](client/src/components/common/TagForm.tsx) | Tag creation/edit form |
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Updated schema with people, tags, task_assignees, task_tags tables |
+| [`README.md`](README.md) | Added documentation for new features and API endpoints |
+| [`server/db/schema.js`](server/db/schema.js) | Added new tables and indexes |
+| [`server/db/seed.js`](server/db/seed.js) | Added sample people, tags, and assignments |
+| [`server/routes/tasks.js`](server/routes/tasks.js) | Added assignee and tag endpoints |
+| [`server/index.js`](server/index.js) | Registered new route handlers |
+| [`client/src/types/index.ts`](client/src/types/index.ts) | Added TypeScript interfaces for new entities |
+| [`client/src/services/api.ts`](client/src/services/api.ts) | Added API client methods for people and tags |
+| [`client/src/context/TaskContext.tsx`](client/src/context/TaskContext.tsx) | Enhanced with assignee and tag support |
+| [`client/src/components/common/TaskForm.tsx`](client/src/components/common/TaskForm.tsx) | Added assignee and tag selection fields |
+| [`client/src/components/common/Badge.tsx`](client/src/components/common/Badge.tsx) | Enhanced for tag display |
+| [`client/src/components/kanban/TaskCard.tsx`](client/src/components/kanban/TaskCard.tsx) | Added assignee and tag display |
+| [`client/src/components/list/TaskRow.tsx`](client/src/components/list/TaskRow.tsx) | Added assignee and tag columns |
+| [`client/src/components/list/ListView.tsx`](client/src/components/list/ListView.tsx) | Updated with new columns |
+| [`client/src/components/list/FilterBar.tsx`](client/src/components/list/FilterBar.tsx) | Added assignee and tag filters |
+| [`client/src/components/layout/Sidebar.tsx`](client/src/components/layout/Sidebar.tsx) | Added People navigation item |
+| [`client/src/App.tsx`](client/src/App.tsx) | Added People view route |
+
+#### Agents Used for v1.1.0
+
+| Mode | Task | Files Created/Modified |
+|------|------|------------------------|
+| **Architect** | Schema Design | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+| **Code** | Backend Implementation | [`server/db/schema.js`](server/db/schema.js), [`server/db/seed.js`](server/db/seed.js), [`server/routes/people.js`](server/routes/people.js), [`server/routes/tags.js`](server/routes/tags.js), [`server/routes/tasks.js`](server/routes/tasks.js), [`server/index.js`](server/index.js) |
+| **Frontend Specialist** | Frontend Implementation | [`client/src/types/index.ts`](client/src/types/index.ts), [`client/src/services/api.ts`](client/src/services/api.ts), [`client/src/context/PeopleContext.tsx`](client/src/context/PeopleContext.tsx), [`client/src/context/TagContext.tsx`](client/src/context/TagContext.tsx), [`client/src/context/TaskContext.tsx`](client/src/context/TaskContext.tsx), [`client/src/components/people/PeopleView.tsx`](client/src/components/people/PeopleView.tsx), [`client/src/components/common/PersonForm.tsx`](client/src/components/common/PersonForm.tsx), [`client/src/components/common/TagForm.tsx`](client/src/components/common/TagForm.tsx), [`client/src/components/common/TaskForm.tsx`](client/src/components/common/TaskForm.tsx), [`client/src/components/common/Badge.tsx`](client/src/components/common/Badge.tsx), [`client/src/components/kanban/TaskCard.tsx`](client/src/components/kanban/TaskCard.tsx), [`client/src/components/list/TaskRow.tsx`](client/src/components/list/TaskRow.tsx), [`client/src/components/list/ListView.tsx`](client/src/components/list/ListView.tsx), [`client/src/components/list/FilterBar.tsx`](client/src/components/list/FilterBar.tsx), [`client/src/components/layout/Sidebar.tsx`](client/src/components/layout/Sidebar.tsx), [`client/src/App.tsx`](client/src/App.tsx) |
+| **Documentation Specialist** | Documentation Update | [`README.md`](README.md) |
+
+#### Database Changes
+
+```sql
+-- New people table for contacts
+CREATE TABLE people (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT,
+    company TEXT,
+    designation TEXT,
+    project_id TEXT,
+    created_at DATETIME,
+    updated_at DATETIME,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+
+-- New tags table for task categorization
+CREATE TABLE tags (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    color TEXT DEFAULT '#6B7280',
+    project_id TEXT,
+    created_at DATETIME,
+    updated_at DATETIME,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+
+-- New task_assignees table for co-assignees
+CREATE TABLE task_assignees (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    person_id TEXT NOT NULL,
+    role TEXT DEFAULT 'collaborator',
+    created_at DATETIME,
+    FOREIGN KEY (task_id) REFERENCES tasks(id),
+    FOREIGN KEY (person_id) REFERENCES people(id)
+);
+
+-- New task_tags table for task-tag relationships
+CREATE TABLE task_tags (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    tag_id TEXT NOT NULL,
+    created_at DATETIME,
+    FOREIGN KEY (task_id) REFERENCES tasks(id),
+    FOREIGN KEY (tag_id) REFERENCES tags(id)
+);
+
+-- Added assignee_id column to tasks table
+ALTER TABLE tasks ADD COLUMN assignee_id TEXT REFERENCES people(id);
+
+-- Added indexes for new columns
+CREATE INDEX idx_people_project ON people(project_id);
+CREATE INDEX idx_tags_project ON tags(project_id);
+CREATE INDEX idx_task_assignees_task ON task_assignees(task_id);
+CREATE INDEX idx_task_assignees_person ON task_assignees(person_id);
+CREATE INDEX idx_task_tags_task ON task_tags(task_id);
+CREATE INDEX idx_task_tags_tag ON task_tags(tag_id);
+CREATE INDEX idx_tasks_assignee ON tasks(assignee_id);
+```
+
+#### API Endpoints Added
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/people` | GET | List all people (optional `?project_id=` filter) |
+| `/api/people/:id` | GET | Get single person |
+| `/api/people` | POST | Create new person |
+| `/api/people/:id` | PUT | Update person |
+| `/api/people/:id` | DELETE | Delete person |
+| `/api/tags` | GET | List all tags (optional `?project_id=` filter) |
+| `/api/tags/:id` | GET | Get single tag |
+| `/api/tags` | POST | Create new tag |
+| `/api/tags/:id` | PUT | Update tag |
+| `/api/tags/:id` | DELETE | Delete tag |
+| `/api/tasks/:id/assignee` | PUT | Set primary assignee |
+| `/api/tasks/:id/assignees` | GET | Get co-assignees |
+| `/api/tasks/:id/assignees` | POST | Add co-assignee |
+| `/api/tasks/:id/assignees/:assigneeId` | DELETE | Remove co-assignee |
+| `/api/tasks/:id/tags` | GET | Get task tags |
+| `/api/tasks/:id/tags` | POST | Add tag to task |
+| `/api/tasks/:id/tags/:tagId` | DELETE | Remove tag from task |
 
 ---
 
@@ -74,7 +228,7 @@ flowchart TD
     subgraph Phase3["🎨 Phase 3: Frontend"]
         FE[Frontend Specialist]
         REACT[React Components]
-        VIEWS[5 Views]
+        VIEWS[6 Views]
         CONTEXT[Context Providers]
     end
 
@@ -248,7 +402,9 @@ client/src/
 ├── context/
 │   ├── AppContext.tsx    # View/UI state
 │   ├── ProjectContext.tsx # Project state
-│   └── TaskContext.tsx   # Task state + filtering
+│   ├── TaskContext.tsx   # Task state + filtering
+│   ├── PeopleContext.tsx # People state (v1.1.0)
+│   └── TagContext.tsx    # Tag state (v1.1.0)
 └── components/
     ├── common/           # Reusable components
     ├── layout/           # Layout structure
@@ -256,20 +412,22 @@ client/src/
     ├── list/             # List view
     ├── calendar/         # Calendar view
     ├── timeline/         # Timeline/Gantt
-    └── dashboard/        # Dashboard stats
+    ├── dashboard/        # Dashboard stats
+    └── people/           # People view (v1.1.0)
 ```
 
 **Key Files Implemented**:
 
 | Component Category | Files | Features |
 |-------------------|-------|----------|
-| **Common** | [`Button.tsx`](client/src/components/common/Button.tsx), [`Modal.tsx`](client/src/components/common/Modal.tsx), [`Card.tsx`](client/src/components/common/Card.tsx), [`Badge.tsx`](client/src/components/common/Badge.tsx), [`TaskForm.tsx`](client/src/components/common/TaskForm.tsx), [`ProjectForm.tsx`](client/src/components/common/ProjectForm.tsx) | Reusable UI components with variants |
+| **Common** | [`Button.tsx`](client/src/components/common/Button.tsx), [`Modal.tsx`](client/src/components/common/Modal.tsx), [`Card.tsx`](client/src/components/common/Card.tsx), [`Badge.tsx`](client/src/components/common/Badge.tsx), [`TaskForm.tsx`](client/src/components/common/TaskForm.tsx), [`ProjectForm.tsx`](client/src/components/common/ProjectForm.tsx), [`PersonForm.tsx`](client/src/components/common/PersonForm.tsx) (v1.1.0), [`TagForm.tsx`](client/src/components/common/TagForm.tsx) (v1.1.0) | Reusable UI components with variants |
 | **Layout** | [`Layout.tsx`](client/src/components/layout/Layout.tsx), [`Header.tsx`](client/src/components/layout/Header.tsx), [`Sidebar.tsx`](client/src/components/layout/Sidebar.tsx) | App shell with navigation |
 | **Kanban** | [`KanbanBoard.tsx`](client/src/components/kanban/KanbanBoard.tsx), [`KanbanColumn.tsx`](client/src/components/kanban/KanbanColumn.tsx), [`TaskCard.tsx`](client/src/components/kanban/TaskCard.tsx) | Drag-and-drop board with @dnd-kit |
 | **List** | [`ListView.tsx`](client/src/components/list/ListView.tsx), [`FilterBar.tsx`](client/src/components/list/FilterBar.tsx), [`TaskRow.tsx`](client/src/components/list/TaskRow.tsx), [`SortHeader.tsx`](client/src/components/list/SortHeader.tsx) | Sortable, filterable table |
 | **Calendar** | [`CalendarView.tsx`](client/src/components/calendar/CalendarView.tsx), [`TaskEvent.tsx`](client/src/components/calendar/TaskEvent.tsx) | Monthly calendar with react-big-calendar |
 | **Timeline** | [`TimelineView.tsx`](client/src/components/timeline/TimelineView.tsx), [`TimelineTask.tsx`](client/src/components/timeline/TimelineTask.tsx) | Gantt-style timeline |
 | **Dashboard** | [`DashboardView.tsx`](client/src/components/dashboard/DashboardView.tsx), [`StatCard.tsx`](client/src/components/dashboard/StatCard.tsx), [`UpcomingDeadlines.tsx`](client/src/components/dashboard/UpcomingDeadlines.tsx) | Statistics with recharts |
+| **People** (v1.1.0) | [`PeopleView.tsx`](client/src/components/people/PeopleView.tsx) | Contact management with search and filtering |
 
 **State Management Implementation**:
 
@@ -302,7 +460,7 @@ interface TaskContextType {
 1. **Feature Overview**
    - Screenshots placeholders
    - Core functionality list
-   - Five view descriptions
+   - Six view descriptions (Dashboard, Kanban, List, Calendar, Timeline, People)
 
 2. **Tech Stack Table**
    - Backend technologies
@@ -500,6 +658,8 @@ module.exports = {
 
 > **Note**: These are rough estimates based on typical AI agent performance. Actual values may vary.
 
+### Initial Development (v1.0.0)
+
 | Phase | Mode | Est. Input Tokens | Est. Output Tokens | Est. Time |
 |-------|------|-------------------|-------------------|-----------|
 | Architecture | Architect | ~5,000 | ~8,000 | ~10 min |
@@ -507,17 +667,35 @@ module.exports = {
 | Frontend | Frontend Specialist | ~10,000 | ~25,000 | ~45 min |
 | Documentation | Docs Specialist | ~5,000 | ~8,000 | ~10 min |
 | Integration | Code | ~1,000 | ~500 | ~2 min |
-| **Total** | - | **~24,000** | **~47,500** | **~82 min** |
+| **Subtotal** | - | **~24,000** | **~47,500** | **~82 min** |
+
+### v1.1.0 Enhancement (People, Tags & Assignees)
+
+| Phase | Mode | Est. Input Tokens | Est. Output Tokens | Est. Time |
+|-------|------|-------------------|-------------------|-----------|
+| Architecture Update | Architect | ~3,000 | ~5,000 | ~8 min |
+| Backend | Code | ~4,000 | ~8,000 | ~20 min |
+| Frontend | Frontend Specialist | ~8,000 | ~15,000 | ~30 min |
+| Documentation | Docs Specialist | ~3,000 | ~5,000 | ~8 min |
+| **Subtotal** | - | **~18,000** | **~33,000** | **~66 min** |
+
+### Total Project Statistics
+
+| Metric | Value |
+|--------|-------|
+| **Total Input Tokens** | ~42,000 |
+| **Total Output Tokens** | ~80,500 |
+| **Total Development Time** | ~148 min (~2.5 hours) |
 
 ### File Statistics
 
 | Category | Files | Total Characters |
 |----------|-------|------------------|
-| Documentation | 3 | ~45,000 |
-| Backend (JS) | 6 | ~20,000 |
-| Frontend (TSX/TS) | 26 | ~150,000 |
+| Documentation | 3 | ~95,000 |
+| Backend (JS) | 8 | ~53,000 |
+| Frontend (TSX/TS) | 32 | ~220,000 |
 | Configuration | 6 | ~4,000 |
-| **Total** | **41** | **~219,000** |
+| **Total** | **49** | **~372,000** |
 
 ---
 
@@ -586,7 +764,7 @@ module.exports = {
 
 The TaskFlow project demonstrates that coordinated AI agent collaboration can produce a complete, production-ready application. By leveraging specialized modes for architecture, backend, frontend, and documentation, the project achieved:
 
-- ✅ **Complete Feature Set**: All five views fully implemented
+- ✅ **Complete Feature Set**: All six views fully implemented
 - ✅ **Clean Architecture**: Separation of concerns between frontend and backend
 - ✅ **Comprehensive Documentation**: README and ARCHITECTURE docs
 - ✅ **Modern Tech Stack**: React 18, TypeScript, Vite, Tailwind

@@ -1,7 +1,7 @@
 import React, { forwardRef, type HTMLAttributes, type ReactNode } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import type { TaskStatus, TaskPriority } from '../../types';
+import type { TaskStatus, TaskPriority, Tag } from '../../types';
 
 type BadgeVariant = 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info';
 type BadgeSize = 'sm' | 'md' | 'lg';
@@ -160,5 +160,59 @@ export const PriorityBadge = forwardRef<HTMLSpanElement, PriorityBadgeProps>(
 );
 
 PriorityBadge.displayName = 'PriorityBadge';
+
+// Tag Badge Component
+interface TagBadgeProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'size'> {
+  tag: Tag;
+  size?: BadgeSize;
+}
+
+export const TagBadge = forwardRef<HTMLSpanElement, TagBadgeProps>(
+  ({ tag, size = 'md', className, ...props }, ref) => {
+    // Calculate contrasting text color based on tag background
+    const getContrastColor = (hexColor: string): string => {
+      const hex = hexColor.replace('#', '');
+      const r = parseInt(hex.substr(0, 2), 16);
+      const g = parseInt(hex.substr(2, 2), 16);
+      const b = parseInt(hex.substr(4, 2), 16);
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.5 ? '#1f2937' : '#f9fafb'; // gray-800 or gray-50
+    };
+
+    const textColor = getContrastColor(tag.color);
+    const sizeStylesMap: Record<BadgeSize, string> = {
+      sm: 'px-1.5 py-0.5 text-xs',
+      md: 'px-2 py-0.5 text-xs',
+      lg: 'px-2.5 py-1 text-sm',
+    };
+
+    return (
+      <span
+        ref={ref}
+        className={twMerge(
+          clsx(
+            'inline-flex items-center font-medium rounded-full',
+            sizeStylesMap[size],
+            className
+          )
+        )}
+        style={{
+          backgroundColor: tag.color,
+          color: textColor,
+        }}
+        {...props}
+      >
+        <span
+          className="mr-1.5 h-1.5 w-1.5 rounded-full"
+          style={{ backgroundColor: textColor }}
+          aria-hidden="true"
+        />
+        {tag.name}
+      </span>
+    );
+  }
+);
+
+TagBadge.displayName = 'TagBadge';
 
 export default Badge;

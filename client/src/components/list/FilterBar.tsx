@@ -1,14 +1,16 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Search, X, Filter, ChevronDown } from 'lucide-react';
-import type { TaskStatus, TaskPriority } from '../../types';
+import { Search, X, Filter, ChevronDown, User, Tag } from 'lucide-react';
+import type { TaskStatus, TaskPriority, Person, Tag as TagType } from '../../types';
 import { STATUS_CONFIG, PRIORITY_CONFIG } from '../../types';
 
 export interface ListFilters {
   search: string;
   status: TaskStatus[];
   priority: TaskPriority[];
+  assignee_id: string;
+  tag_id: string;
 }
 
 interface FilterBarProps {
@@ -16,6 +18,8 @@ interface FilterBarProps {
   onFilterChange: (filters: ListFilters) => void;
   totalTasks: number;
   filteredCount: number;
+  people?: Person[];
+  tags?: TagType[];
 }
 
 // Custom debounce hook
@@ -158,7 +162,169 @@ function MultiSelectDropdown({ label, options, selected, onChange }: MultiSelect
   );
 }
 
-export function FilterBar({ filters, onFilterChange, totalTasks, filteredCount }: FilterBarProps) {
+// Single select dropdown for assignee and tag
+interface SingleSelectDropdownProps {
+  label: string;
+  icon: React.ReactNode;
+  options: { value: string; label: string; color?: string; subtitle?: string }[];
+  selected: string;
+  onChange: (selected: string) => void;
+  placeholder?: string;
+}
+
+function SingleSelectDropdown({ 
+  label, 
+  icon, 
+  options, 
+  selected, 
+  onChange, 
+  placeholder = 'All' 
+}: SingleSelectDropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
+  const selectedOption = options.find(o => o.value === selected);
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        onKeyDown={handleKeyDown}
+        className={twMerge(
+          clsx(
+            'inline-flex items-center gap-2 px-3 py-2',
+            'text-sm font-medium rounded-md',
+            'border border-gray-300 dark:border-gray-600',
+            'bg-white dark:bg-gray-800',
+            'text-gray-700 dark:text-gray-300',
+            'hover:bg-gray-50 dark:hover:bg-gray-700',
+            'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+            'dark:focus:ring-offset-gray-900',
+            'transition-colors duration-150',
+            selected && 'ring-2 ring-primary-500'
+          )
+        )}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+      >
+        {icon}
+        <span className="max-w-[100px] truncate">
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+        <ChevronDown
+          className={clsx('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
+          aria-hidden="true"
+        />
+      </button>
+
+      {isOpen && (
+        <div
+          className="absolute z-20 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 py-1 max-h-64 overflow-y-auto"
+          role="listbox"
+          aria-label={`${label} options`}
+        >
+          {/* Clear option */}
+          <button
+            type="button"
+            onClick={() => {
+              onChange('');
+              setIsOpen(false);
+            }}
+            className={twMerge(
+              clsx(
+                'w-full flex items-center gap-3 px-4 py-2 text-sm text-left',
+                'hover:bg-gray-100 dark:hover:bg-gray-700',
+                'focus:outline-none focus:bg-gray-100 dark:focus:bg-gray-700',
+                'transition-colors duration-150',
+                !selected && 'bg-primary-50 dark:bg-primary-900/20'
+              )
+            )}
+            role="option"
+            aria-selected={!selected}
+          >
+            <span className="text-gray-500 dark:text-gray-400 italic">{placeholder}</span>
+          </button>
+          
+          {options.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              className={twMerge(
+                clsx(
+                  'w-full flex items-center gap-3 px-4 py-2 text-sm text-left',
+                  'hover:bg-gray-100 dark:hover:bg-gray-700',
+                  'focus:outline-none focus:bg-gray-100 dark:focus:bg-gray-700',
+                  'transition-colors duration-150',
+                  selected === option.value && 'bg-primary-50 dark:bg-primary-900/20'
+                )
+              )}
+              role="option"
+              aria-selected={selected === option.value}
+            >
+              {option.color && (
+                <span
+                  className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: option.color }}
+                  aria-hidden="true"
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="text-gray-700 dark:text-gray-300 truncate">{option.label}</div>
+                {option.subtitle && (
+                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {option.subtitle}
+                  </div>
+                )}
+              </div>
+              {selected === option.value && (
+                <svg className="w-4 h-4 text-primary-600 flex-shrink-0" fill="currentColor" viewBox="0 0 12 12">
+                  <path d="M10.28 2.28L4 8.56 1.72 6.28a.75.75 0 00-1.06 1.06l3 3a.75.75 0 001.06 0l7-7a.75.75 0 00-1.06-1.06z" />
+                </svg>
+              )}
+            </button>
+          ))}
+          
+          {options.length === 0 && (
+            <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 italic">
+              No options available
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function FilterBar({ 
+  filters, 
+  onFilterChange, 
+  totalTasks, 
+  filteredCount,
+  people = [],
+  tags = [],
+}: FilterBarProps) {
   const [searchInput, setSearchInput] = useState(filters.search);
   const debouncedSearch = useDebounce(searchInput, 300);
 
@@ -187,20 +353,44 @@ export function FilterBar({ filters, onFilterChange, totalTasks, filteredCount }
     [filters, onFilterChange]
   );
 
+  const handleAssigneeChange = useCallback(
+    (assignee_id: string) => {
+      onFilterChange({ ...filters, assignee_id });
+    },
+    [filters, onFilterChange]
+  );
+
+  const handleTagChange = useCallback(
+    (tag_id: string) => {
+      onFilterChange({ ...filters, tag_id });
+    },
+    [filters, onFilterChange]
+  );
+
   const handleClearFilters = () => {
     setSearchInput('');
     onFilterChange({
       search: '',
       status: [],
       priority: [],
+      assignee_id: '',
+      tag_id: '',
     });
   };
 
   const hasActiveFilters =
-    filters.search || filters.status.length > 0 || filters.priority.length > 0;
+    filters.search || 
+    filters.status.length > 0 || 
+    filters.priority.length > 0 ||
+    filters.assignee_id ||
+    filters.tag_id;
 
   const activeFilterCount =
-    (filters.search ? 1 : 0) + filters.status.length + filters.priority.length;
+    (filters.search ? 1 : 0) + 
+    filters.status.length + 
+    filters.priority.length +
+    (filters.assignee_id ? 1 : 0) +
+    (filters.tag_id ? 1 : 0);
 
   const statusOptions = Object.entries(STATUS_CONFIG).map(([value, config]) => ({
     value,
@@ -212,6 +402,19 @@ export function FilterBar({ filters, onFilterChange, totalTasks, filteredCount }
     value,
     label: config.label,
     color: config.color,
+  }));
+
+  const assigneeOptions = people.map(person => ({
+    value: person.id,
+    label: person.name,
+    color: '#3B82F6',
+    subtitle: person.designation,
+  }));
+
+  const tagOptions = tags.map(tag => ({
+    value: tag.id,
+    label: tag.name,
+    color: tag.color,
   }));
 
   return (
@@ -266,6 +469,22 @@ export function FilterBar({ filters, onFilterChange, totalTasks, filteredCount }
             options={priorityOptions}
             selected={filters.priority}
             onChange={handlePriorityChange}
+          />
+          <SingleSelectDropdown
+            label="Assignee"
+            icon={<User className="w-4 h-4" aria-hidden="true" />}
+            options={assigneeOptions}
+            selected={filters.assignee_id}
+            onChange={handleAssigneeChange}
+            placeholder="Anyone"
+          />
+          <SingleSelectDropdown
+            label="Tag"
+            icon={<Tag className="w-4 h-4" aria-hidden="true" />}
+            options={tagOptions}
+            selected={filters.tag_id}
+            onChange={handleTagChange}
+            placeholder="Any tag"
           />
 
           {/* Clear Filters Button */}

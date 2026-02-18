@@ -3,12 +3,15 @@ import { Routes, Route, Navigate, useParams, useNavigate } from 'react-router-do
 import { AppProvider, useApp } from './context/AppContext';
 import { ProjectProvider, useProjects } from './context/ProjectContext';
 import { TaskProvider } from './context/TaskContext';
+import { PeopleProvider } from './context/PeopleContext';
+import { TagProvider } from './context/TagContext';
 import { Layout } from './components/layout/Layout';
 import { KanbanBoard } from './components/kanban/KanbanBoard';
 import { ListView } from './components/list/ListView';
 import { CalendarView } from './components/calendar/CalendarView';
 import { TimelineView } from './components/timeline/TimelineView';
 import { DashboardView } from './components/dashboard/DashboardView';
+import { PeopleView } from './components/people/PeopleView';
 import type { ViewType } from './types';
 
 // TaskProviderWrapper - provides TaskProvider at Layout level so Layout can use useTasks()
@@ -31,6 +34,7 @@ const PlaceholderView: React.FC<{ view: ViewType }> = ({ view }) => {
     calendar: 'Calendar View',
     timeline: 'Timeline View',
     dashboard: 'Dashboard',
+    people: 'People',
   };
   
   return (
@@ -148,6 +152,27 @@ const ProjectViewWrapper: React.FC<{ view: ViewType }> = ({ view }) => {
   return renderView();
 };
 
+// People View Wrapper
+const PeopleViewWrapper: React.FC = () => {
+  const { projects, loading } = useProjects();
+  const { setCurrentView } = useApp();
+  
+  // Set current view to null when on people page
+  useEffect(() => {
+    setCurrentView('kanban'); // Default view, but sidebar will show People as active
+  }, [setCurrentView]);
+  
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+      </div>
+    );
+  }
+  
+  return <PeopleView />;
+};
+
 // Main App Content
 const AppContent: React.FC = () => {
   const { projects, loading } = useProjects();
@@ -179,6 +204,16 @@ const AppContent: React.FC = () => {
               </Layout>
             </TaskProviderWrapper>
           )
+        }
+      />
+      
+      {/* People route */}
+      <Route
+        path="/people"
+        element={
+          <Layout>
+            <PeopleViewWrapper />
+          </Layout>
         }
       />
       
@@ -245,7 +280,11 @@ function App() {
   return (
     <AppProvider>
       <ProjectProvider>
-        <AppContent />
+        <PeopleProvider>
+          <TagProvider>
+            <AppContent />
+          </TagProvider>
+        </PeopleProvider>
       </ProjectProvider>
     </AppProvider>
   );

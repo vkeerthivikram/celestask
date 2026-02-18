@@ -1,7 +1,7 @@
 # 📋 TaskFlow - Project Management Application
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue)](https://github.com)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 
@@ -18,9 +18,9 @@ A **local-first, single-user** project management web application inspired by Ji
 |:-------------:|:-------------:|
 | ![Calendar View](screenshots/calendar.png) | ![Timeline View](screenshots/timeline.png) |
 
-| Dashboard |
-|:---------:|
-| ![Dashboard](screenshots/dashboard.png) |
+| Dashboard | People View |
+|:---------:|:-----------:|
+| ![Dashboard](screenshots/dashboard.png) | ![People View](screenshots/people.png) |
 
 ---
 
@@ -33,16 +33,30 @@ A **local-first, single-user** project management web application inspired by Ji
 - **Local-First** - All data stored locally in SQLite, works offline
 - **Responsive Design** - Works seamlessly on desktop and mobile devices
 
-### 📊 Five Powerful Views
+### 👥 People & Assignments
+- **People Management** - Create and manage contacts (not users) with name, email, company, and designation
+- **Project Association** - Associate people with specific projects
+- **Task Assignments** - Assign a primary assignee and multiple co-assignees (collaborators) to tasks
+- **Assignment Roles** - Track collaborator roles on tasks
+
+### 🏷️ Tags & Categorization
+- **Custom Tags** - Create tags with custom names and colors
+- **Tag Scope** - Tags can be global (available to all projects) or project-specific
+- **Multiple Tags** - Apply multiple tags to any task for flexible categorization
+- **Tag Filtering** - Filter tasks by tags in the list view
+
+### 📊 Six Powerful Views
 
 1. **📌 Kanban Board** - Visual task management with 5 status columns
    - Backlog → To Do → In Progress → Review → Done
    - Drag tasks between columns to update status
    - Color-coded priority badges
+   - Shows assignees and tags on task cards
 
 2. **📝 List View** - Traditional tabular view with advanced filtering
    - Sortable columns (title, status, priority, due date)
-   - Filter by status, priority, project, and date range
+   - Filter by status, priority, project, assignee, and date range
+   - Filter by tags
    - Search across task titles and descriptions
 
 3. **📅 Calendar View** - Monthly calendar with due date visualization
@@ -61,11 +75,19 @@ A **local-first, single-user** project management web application inspired by Ji
    - Priority breakdown visualization
    - Upcoming deadlines list
 
+6. **👥 People View** - Contact and assignment management
+   - View all contacts or filter by project
+   - See contact details (email, company, designation)
+   - Manage project-associated people
+
 ### 🏷️ Task Properties
 - **Status**: Backlog, To Do, In Progress, Review, Done
 - **Priority**: Low, Medium, High, Urgent
 - **Dates**: Start date and due date
 - **Project**: Belongs to a project
+- **Assignee**: Primary assignee (person responsible)
+- **Co-Assignees**: Multiple collaborators with roles
+- **Tags**: Multiple tags for categorization
 
 ---
 
@@ -312,7 +334,39 @@ Reinstall-All
    - **Priority** (Low, Medium, High, Urgent)
    - **Start Date** (optional)
    - **Due Date** (optional)
+   - **Assignee** (primary person responsible)
+   - **Tags** (select multiple tags)
 4. Click **"Create Task"**
+
+### Managing People
+1. Navigate to the **People** view from the sidebar
+2. Click **"+ New Person"** to add a contact
+3. Fill in person details:
+   - **Name** (required)
+   - **Email** (optional)
+   - **Company** (optional)
+   - **Designation** (optional)
+   - **Project** (associate with a project, or leave blank for global)
+4. Click **"Create Person"**
+
+### Assigning People to Tasks
+1. Open a task for editing (click on the task card)
+2. In the **Assignee** dropdown, select the primary assignee
+3. To add co-assignees (collaborators):
+   - Click **"Add Collaborator"**
+   - Select a person and optionally specify their role
+4. Click **"Save Changes"**
+
+### Creating and Using Tags
+1. Tags can be created when editing a task:
+   - Click in the **Tags** field
+   - Select existing tags or type to create a new one
+2. When creating a new tag:
+   - Enter a tag name
+   - Choose a color
+   - Select if it's global or project-specific
+3. Tags appear as colored badges on task cards
+4. Filter tasks by tags in the List View
 
 ### Editing/Deleting Tasks
 - **Edit**: Click on a task card to open the edit modal
@@ -325,6 +379,7 @@ Use the sidebar navigation to switch between:
 - 📅 Calendar
 - 📈 Timeline
 - 📊 Dashboard
+- 👥 People
 
 ### Using Drag-and-Drop in Kanban
 1. Click and hold a task card
@@ -336,6 +391,8 @@ Use the sidebar navigation to switch between:
 2. Filter by:
    - **Status**: Select one or more statuses
    - **Priority**: Select priority level
+   - **Assignee**: Select person assigned to task
+   - **Tags**: Select one or more tags
    - **Search**: Type to search task titles
 3. Click **"Clear Filters"** to reset
 
@@ -382,6 +439,8 @@ curl -X POST http://localhost:3001/api/projects \
 | `projectId` | string | Filter by project ID |
 | `status` | string | Filter by status |
 | `priority` | string | Filter by priority |
+| `assigneeId` | string | Filter by assignee ID |
+| `tagId` | string | Filter by tag ID |
 
 #### Example: Create Task
 ```bash
@@ -393,7 +452,9 @@ curl -X POST http://localhost:3001/api/tasks \
     "description": "Task description",
     "status": "todo",
     "priority": "high",
-    "dueDate": "2024-02-28"
+    "dueDate": "2024-02-28",
+    "assigneeId": "person-uuid",
+    "tagIds": ["tag-uuid-1", "tag-uuid-2"]
   }'
 ```
 
@@ -402,6 +463,91 @@ curl -X POST http://localhost:3001/api/tasks \
 curl -X PATCH http://localhost:3001/api/tasks/task-uuid/status \
   -H "Content-Type: application/json" \
   -d '{"status": "in_progress"}'
+```
+
+### People API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/people` | Get all people (optional `?project_id=xxx`) |
+| `GET` | `/people/:id` | Get single person by ID |
+| `POST` | `/people` | Create a new person |
+| `PUT` | `/people/:id` | Update a person |
+| `DELETE` | `/people/:id` | Delete a person |
+
+#### Example: Create Person
+```bash
+curl -X POST http://localhost:3001/api/people \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Doe",
+    "email": "john@example.com",
+    "company": "Acme Inc",
+    "designation": "Developer",
+    "project_id": "project-uuid"
+  }'
+```
+
+### Tags API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/tags` | Get all tags (optional `?project_id=xxx`) |
+| `GET` | `/tags/:id` | Get single tag by ID |
+| `POST` | `/tags` | Create a new tag |
+| `PUT` | `/tags/:id` | Update a tag |
+| `DELETE` | `/tags/:id` | Delete a tag |
+
+#### Example: Create Tag
+```bash
+curl -X POST http://localhost:3001/api/tags \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Bug",
+    "color": "#EF4444",
+    "project_id": "project-uuid"
+  }'
+```
+
+### Task Assignments API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/tasks/:id/assignees` | Get co-assignees for a task |
+| `POST` | `/tasks/:id/assignees` | Add a co-assignee to a task |
+| `DELETE` | `/tasks/:id/assignees/:personId` | Remove a co-assignee from a task |
+| `PUT` | `/tasks/:id/assignee` | Set the primary assignee |
+
+#### Example: Add Co-Assignee
+```bash
+curl -X POST http://localhost:3001/api/tasks/task-uuid/assignees \
+  -H "Content-Type: application/json" \
+  -d '{
+    "person_id": "person-uuid",
+    "role": "Reviewer"
+  }'
+```
+
+#### Example: Set Primary Assignee
+```bash
+curl -X PUT http://localhost:3001/api/tasks/task-uuid/assignee \
+  -H "Content-Type: application/json" \
+  -d '{"assignee_id": "person-uuid"}'
+```
+
+### Task Tags API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/tasks/:id/tags` | Get tags for a task |
+| `POST` | `/tasks/:id/tags` | Add a tag to a task |
+| `DELETE` | `/tasks/:id/tags/:tagId` | Remove a tag from a task |
+
+#### Example: Add Tag to Task
+```bash
+curl -X POST http://localhost:3001/api/tasks/task-uuid/tags \
+  -H "Content-Type: application/json" \
+  -d '{"tag_id": "tag-uuid"}'
 ```
 
 ### Response Format
@@ -458,13 +604,55 @@ server/data/taskmanager.db
 | `priority` | TEXT | Priority (low/medium/high/urgent) |
 | `start_date` | DATE | Task start date |
 | `due_date` | DATE | Task due date |
+| `assignee_id` | TEXT | Foreign key to people (primary assignee) |
 | `created_at` | DATETIME | Creation timestamp |
 | `updated_at` | DATETIME | Last update timestamp |
+
+#### `people`
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT | Primary key (UUID) |
+| `name` | TEXT | Person's name |
+| `email` | TEXT | Email address |
+| `company` | TEXT | Company name |
+| `designation` | TEXT | Job title/role |
+| `project_id` | TEXT | Foreign key to projects (optional) |
+| `created_at` | DATETIME | Creation timestamp |
+| `updated_at` | DATETIME | Last update timestamp |
+
+#### `tags`
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT | Primary key (UUID) |
+| `name` | TEXT | Tag name |
+| `color` | TEXT | Hex color code (default: #6B7280) |
+| `project_id` | TEXT | Foreign key to projects (null = global) |
+| `created_at` | DATETIME | Creation timestamp |
+| `updated_at` | DATETIME | Last update timestamp |
+
+#### `task_assignees`
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT | Primary key (UUID) |
+| `task_id` | TEXT | Foreign key to tasks (CASCADE DELETE) |
+| `person_id` | TEXT | Foreign key to people (CASCADE DELETE) |
+| `role` | TEXT | Role on this task (default: 'collaborator') |
+| `created_at` | DATETIME | Creation timestamp |
+
+#### `task_tags`
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT | Primary key (UUID) |
+| `task_id` | TEXT | Foreign key to tasks (CASCADE DELETE) |
+| `tag_id` | TEXT | Foreign key to tags (CASCADE DELETE) |
+| `created_at` | DATETIME | Creation timestamp |
 
 ### Seeded Data
 On first run, the database is automatically seeded with:
 - 3 sample projects
 - 15+ sample tasks across various statuses
+- Sample people contacts
+- Sample tags
 
 ---
 
@@ -486,7 +674,9 @@ task-tracking/
 │   │   └── seed.js        # Sample data seeder
 │   └── routes/
 │       ├── projects.js    # Project API routes
-│       └── tasks.js       # Task API routes
+│       ├── tasks.js       # Task API routes
+│       ├── people.js      # People API routes
+│       └── tags.js        # Tags API routes
 │
 └── client/                # Frontend React application
     ├── package.json
@@ -507,7 +697,9 @@ task-tracking/
         ├── context/       # React Context providers
         │   ├── AppContext.tsx
         │   ├── ProjectContext.tsx
-        │   └── TaskContext.tsx
+        │   ├── TaskContext.tsx
+        │   ├── PeopleContext.tsx
+        │   └── TagContext.tsx
         │
         └── components/
             ├── common/    # Reusable UI components
@@ -516,7 +708,9 @@ task-tracking/
             │   ├── Card.tsx
             │   ├── Modal.tsx
             │   ├── ProjectForm.tsx
-            │   └── TaskForm.tsx
+            │   ├── TaskForm.tsx
+            │   ├── PersonForm.tsx
+            │   └── TagForm.tsx
             │
             ├── layout/    # Layout components
             │   ├── Header.tsx
@@ -543,10 +737,13 @@ task-tracking/
             │   ├── TimelineView.tsx
             │   └── TimelineTask.tsx
             │
-            └── dashboard/ # Dashboard components
-                ├── DashboardView.tsx
-                ├── StatCard.tsx
-                └── UpcomingDeadlines.tsx
+            ├── dashboard/ # Dashboard components
+            │   ├── DashboardView.tsx
+            │   ├── StatCard.tsx
+            │   └── UpcomingDeadlines.tsx
+            │
+            └── people/    # People view components
+                └── PeopleView.tsx
 ```
 
 ---
@@ -566,11 +763,13 @@ Features:
 - Task count per column
 - Priority badges with color coding
 - Due date display
+- Assignee and tag display
 
 ### 📝 List View
 A traditional table-based view for detailed task management:
 - Sortable columns (click headers to sort)
 - Advanced filtering panel
+- Filter by assignee and tags
 - Full-text search
 - Bulk task overview
 
@@ -595,15 +794,23 @@ Project overview with statistics and visualizations:
 - **Priority Breakdown**: Bar chart of priority distribution
 - **Upcoming Deadlines**: List of tasks due soon
 
+### 👥 People View
+Contact management and team overview:
+- View all contacts in a card layout
+- Filter people by project
+- Contact details (email, company, designation)
+- Project association display
+- Quick actions to edit or delete contacts
+
 ---
 
 ## 🔮 Future Enhancements
 
 Potential improvements for future development:
 
+- [x] ~~**Labels/Tags** - Custom categorization system~~ ✅ Implemented
 - [ ] **Task Dependencies** - Link tasks with dependencies
 - [ ] **Subtasks** - Break down tasks into smaller items
-- [ ] **Labels/Tags** - Custom categorization system
 - [ ] **Time Tracking** - Log time spent on tasks
 - [ ] **Export/Import** - Export data to JSON/CSV
 - [ ] **Keyboard Shortcuts** - Power user navigation

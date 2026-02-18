@@ -11,6 +11,7 @@ import {
   FolderPlus,
   ChevronRight,
   X,
+  Users,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useProjects } from '../../context/ProjectContext';
@@ -67,6 +68,15 @@ export function Sidebar({ onAddProject }: SidebarProps) {
       setSidebarOpen(false);
     }
   };
+
+  // Handle people view click
+  const handlePeopleClick = () => {
+    navigate('/people');
+    // Close sidebar on mobile
+    if (window.innerWidth < 1024) {
+      setSidebarOpen(false);
+    }
+  };
   
   // Close sidebar when clicking outside on mobile
   useEffect(() => {
@@ -84,6 +94,9 @@ export function Sidebar({ onAddProject }: SidebarProps) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [sidebarOpen, setSidebarOpen]);
+
+  // Check if we're on the people page
+  const isPeoplePage = window.location.pathname.startsWith('/people');
   
   const sidebarContent = (
     <>
@@ -120,7 +133,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
                 clsx(
                   'w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium',
                   'transition-colors duration-200',
-                  currentView === item.id
+                  currentView === item.id && !isPeoplePage
                     ? 'bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400'
                     : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
                 )
@@ -130,6 +143,30 @@ export function Sidebar({ onAddProject }: SidebarProps) {
               {item.label}
             </button>
           ))}
+        </nav>
+      </div>
+
+      {/* People Management */}
+      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+        <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+          Manage
+        </h2>
+        <nav className="space-y-1">
+          <button
+            onClick={handlePeopleClick}
+            className={twMerge(
+              clsx(
+                'w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium',
+                'transition-colors duration-200',
+                isPeoplePage
+                  ? 'bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400'
+                  : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+              )
+            )}
+          >
+            <Users className="w-4 h-4" />
+            People
+          </button>
         </nav>
       </div>
       

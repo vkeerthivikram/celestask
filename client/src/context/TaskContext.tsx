@@ -24,6 +24,15 @@ interface TaskContextType {
   deleteTask: (id: number) => Promise<void>;
   clearError: () => void;
   
+  // Assignee Actions
+  setPrimaryAssignee: (taskId: number, personId: number) => Promise<void>;
+  addCoAssignee: (taskId: number, personId: number, role?: string) => Promise<void>;
+  removeCoAssignee: (taskId: number, personId: number) => Promise<void>;
+  
+  // Tag Actions
+  addTagToTask: (taskId: number, tagId: number) => Promise<void>;
+  removeTagFromTask: (taskId: number, tagId: number) => Promise<void>;
+  
   // Helpers
   getTaskById: (id: number) => Task | undefined;
   getTasksByStatus: (status: TaskStatus) => Task[];
@@ -77,6 +86,19 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
       result = result.filter(t => 
         t.title.toLowerCase().includes(searchLower) ||
         t.description.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    if (filters.assignee_id !== undefined) {
+      result = result.filter(t => 
+        t.assignee_id === filters.assignee_id ||
+        t.coAssignees?.some(ca => ca.person_id === filters.assignee_id)
+      );
+    }
+    
+    if (filters.tag_id !== undefined) {
+      result = result.filter(t => 
+        t.tags?.some(tg => tg.tag_id === filters.tag_id)
       );
     }
     
@@ -200,6 +222,125 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
     }
   }, [tasks]);
   
+  // Set primary assignee
+  const setPrimaryAssignee = useCallback(async (taskId: number, personId: number): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const updatedTask = await api.setPrimaryAssignee(taskId, personId);
+      setTasks(prev => 
+        prev.map(t => t.id === taskId ? updatedTask : t)
+      );
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to set primary assignee';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  
+  // Add co-assignee
+  const addCoAssignee = useCallback(async (taskId: number, personId: number, role?: string): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const newAssignee = await api.addTaskAssignee(taskId, { person_id: personId, role });
+      setTasks(prev => 
+        prev.map(t => {
+          if (t.id === taskId) {
+            const coAssignees = t.coAssignees || [];
+            return { ...t, coAssignees: [...coAssignees, newAssignee] };
+          }
+          return t;
+        })
+      );
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add co-assignee';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  
+  // Remove co-assignee
+  const removeCoAssignee = useCallback(async (taskId: number, personId: number): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      await api.removeTaskAssignee(taskId, personId);
+      setTasks(prev => 
+        prev.map(t => {
+          if (t.id === taskId) {
+            const coAssignees = t.coAssignees?.filter(ca => ca.person_id !== personId) || [];
+            return { ...t, coAssignees };
+          }
+          return t;
+        })
+      );
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to remove co-assignee';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  
+  // Add tag to task
+  const addTagToTask = useCallback(async (taskId: number, tagId: number): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const newTaskTag = await api.addTaskTag(taskId, tagId);
+      setTasks(prev => 
+        prev.map(t => {
+          if (t.id === taskId) {
+            const tags = t.tags || [];
+            return { ...t, tags: [...tags, newTaskTag] };
+          }
+          return t;
+        })
+      );
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add tag to task';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  
+  // Remove tag from task
+  const removeTagFromTask = useCallback(async (taskId: number, tagId: number): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      await api.removeTaskTag(taskId, tagId);
+      setTasks(prev => 
+        prev.map(t => {
+          if (t.id === taskId) {
+            const tags = t.tags?.filter(tg => tg.tag_id !== tagId) || [];
+            return { ...t, tags };
+          }
+          return t;
+        })
+      );
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to remove tag from task';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  
   // Delete a task
   const deleteTask = useCallback(async (id: number): Promise<void> => {
     setLoading(true);
@@ -258,6 +399,11 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
     updateTaskStatus,
     deleteTask,
     clearError,
+    setPrimaryAssignee,
+    addCoAssignee,
+    removeCoAssignee,
+    addTagToTask,
+    removeTagFromTask,
     getTaskById,
     getTasksByStatus,
   };

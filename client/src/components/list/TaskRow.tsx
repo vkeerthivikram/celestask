@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Pencil, Trash2, Calendar, AlertCircle } from 'lucide-react';
+import { Pencil, Trash2, Calendar, AlertCircle, Users } from 'lucide-react';
 import type { Task } from '../../types';
-import { StatusBadge, PriorityBadge } from '../common/Badge';
+import { StatusBadge, PriorityBadge, TagBadge } from '../common/Badge';
 import { Button } from '../common/Button';
 
 interface TaskRowProps {
@@ -55,6 +55,14 @@ export function TaskRow({ task, onEdit, onDelete, isOverdue }: TaskRowProps) {
     e.stopPropagation();
     onDelete(task);
   };
+  
+  // Get assignee info
+  const primaryAssignee = task.assignee;
+  const coAssigneeCount = task.coAssignees?.length || 0;
+  
+  // Get first few tags (max 2 visible)
+  const visibleTags = task.tags?.slice(0, 2) || [];
+  const remainingTagCount = (task.tags?.length || 0) - visibleTags.length;
 
   return (
     <tr
@@ -107,6 +115,65 @@ export function TaskRow({ task, onEdit, onDelete, isOverdue }: TaskRowProps) {
       {/* Priority */}
       <td className="px-4 py-3">
         <PriorityBadge priority={task.priority} size="sm" />
+      </td>
+
+      {/* Assignee */}
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2">
+          {primaryAssignee ? (
+            <>
+              <div
+                className="w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0"
+                title={primaryAssignee.name}
+              >
+                <span className="text-primary-600 dark:text-primary-400 text-xs font-medium">
+                  {primaryAssignee.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <span className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[100px]">
+                {primaryAssignee.name}
+              </span>
+              {coAssigneeCount > 0 && (
+                <div
+                  className="flex items-center gap-0.5 text-xs text-gray-500 dark:text-gray-400"
+                  title={`${coAssigneeCount} co-assignee${coAssigneeCount > 1 ? 's' : ''}`}
+                >
+                  <Users className="w-3 h-3" aria-hidden="true" />
+                  <span>+{coAssigneeCount}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <span className="text-sm text-gray-400 dark:text-gray-500">Unassigned</span>
+          )}
+        </div>
+      </td>
+
+      {/* Tags */}
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1 flex-wrap">
+          {visibleTags.length > 0 ? (
+            <>
+              {visibleTags.map((taskTag) => (
+                taskTag.tag && (
+                  <TagBadge
+                    key={taskTag.id}
+                    tag={taskTag.tag}
+                    size="sm"
+                    className="text-[10px]"
+                  />
+                )
+              ))}
+              {remainingTagCount > 0 && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  +{remainingTagCount}
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
+          )}
+        </div>
       </td>
 
       {/* Due Date */}

@@ -157,7 +157,10 @@ task-tracking/
 │       ├── context/
 │       │   ├── AppContext.tsx
 │       │   ├── ProjectContext.tsx
-│       │   └── TaskContext.tsx
+│       │   ├── TaskContext.tsx       # Core tasks
+│       │   ├── PeopleContext.tsx      # Task assignees/people
+│       │   ├── TagContext.tsx         # Tags/categories
+│       │   └── AuthContext.tsx        # Authentication (future)
 │       │
 │       ├── hooks/
 │       │   ├── useProjects.ts
@@ -168,7 +171,13 @@ task-tracking/
 │       ├── services/
 │       │   ├── api.ts              # API client
 │       │   ├── projectService.ts
-│       │   └── taskService.ts
+│       │   ├── taskService.ts        # Core task services
+│       │   ├── assigneeService.ts    # Assignee management
+│       │   ├── tagService.ts         # Tag management
+│       │   └── taskAssigneesService.ts  # Task assignee
+│       │                             # - personId * 100
+│       │                             # + role enum field
+│       │                             # + created_at + updated_at
 │       │
 │       ├── types/
 │       │   ├── index.ts
@@ -230,9 +239,19 @@ task-tracking/
 ```mermaid
 erDiagram
     PROJECTS ||--o{ TASKS : contains
+    PROJECTS ||--o{ PEOPLE : has-members
+    PROJECTS ||--o{ TAGS : has-tags
+    
+    TASKS ||--o| PEOPLE : primary-assignee
+    TASKS ||--o{ TASK_ASSIGNEES : has-collaborators
+    TASKS ||--o{ TASK_TAGS : tagged-with
+    
+    PEOPLE ||--o{ TASK_ASSIGNEES : assigned-to
+    
+    TAGS ||--o{ TASK_TAGS : used-in
     
     PROJECTS {
-        string id PK
+        integer id PK
         string name
         string description
         string color
@@ -241,16 +260,52 @@ erDiagram
     }
     
     TASKS {
-        string id PK
-        string project_id FK
+        integer id PK
+        integer project_id FK
         string title
         string description
         string status
         string priority
         date due_date
         date start_date
+        integer assignee_id FK
         datetime created_at
         datetime updated_at
+    }
+    
+    PEOPLE {
+        integer id PK
+        string name
+        string email
+        string company
+        string designation
+        integer project_id FK
+        datetime created_at
+        datetime updated_at
+    }
+    
+    TAGS {
+        integer id PK
+        string name
+        string color
+        integer project_id FK
+        datetime created_at
+        datetime updated_at
+    }
+    
+    TASK_ASSIGNEES {
+        integer id PK
+        integer task_id FK
+        integer person_id FK
+        string role
+        datetime created_at
+    }
+    
+    TASK_TAGS {
+        integer id PK
+        integer task_id FK
+        integer tag_id FK
+        datetime created_at
     }
 ```
 
@@ -259,7 +314,7 @@ erDiagram
 ```sql
 -- Projects table
 CREATE TABLE IF NOT EXISTS projects (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     description TEXT,
     color TEXT DEFAULT '#3B82F6',
@@ -269,17 +324,66 @@ CREATE TABLE IF NOT EXISTS projects (
 
 -- Tasks table
 CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
     status TEXT DEFAULT 'todo',
     priority TEXT DEFAULT 'medium',
     due_date DATE,
     start_date DATE,
+    assignee_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (assignee_id) REFERENCES people(id) ON DELETE SET NULL
+);
+
+-- People table
+CREATE TABLE IF NOT EXISTS people (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT,
+    company TEXT,
+    designation TEXT,
+    project_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+);
+
+-- Tags table
+CREATE TABLE IF NOT EXISTS tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    color TEXT DEFAULT '#6B7280',
+    project_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+-- Task Assignees table - for co-assignees/collaborators
+CREATE TABLE IF NOT EXISTS task_assignees (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    person_id INTEGER NOT NULL,
+    role TEXT DEFAULT 'collaborator',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (person_id) REFERENCES people(id) ON DELETE CASCADE,
+    UNIQUE(task_id, person_id)
+);
+
+-- Task Tags junction table
+CREATE TABLE IF NOT EXISTS task_tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    tag_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE,
+    UNIQUE(task_id, tag_id)
 );
 
 -- Indexes for performance
@@ -287,6 +391,13 @@ CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
 CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+CREATE INDEX IF NOT EXISTS idx_tasks_assignee_id ON tasks(assignee_id);
+CREATE INDEX IF NOT EXISTS idx_people_project_id ON people(project_id);
+CREATE INDEX IF NOT EXISTS idx_tags_project_id ON tags(project_id);
+CREATE INDEX IF NOT EXISTS idx_task_assignees_task_id ON task_assignees(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_assignees_person_id ON task_assignees(person_id);
+CREATE INDEX IF NOT EXISTS idx_task_tags_task_id ON task_tags(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_tags_tag_id ON task_tags(tag_id);
 ```
 
 ### TypeScript Interfaces
@@ -294,12 +405,12 @@ CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
 ```typescript
 // types/project.ts
 interface Project {
-  id: string;
+  id: number;
   name: string;
   description: string | null;
   color: string;
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // types/task.ts
@@ -307,16 +418,120 @@ type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
 type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 interface Task {
-  id: string;
-  projectId: string;
+  id: number;
+  project_id: number;
   title: string;
   description: string | null;
   status: TaskStatus;
   priority: TaskPriority;
-  dueDate: string | null;
-  startDate: string | null;
-  createdAt: string;
-  updatedAt: string;
+  due_date: string | null;
+  start_date: string | null;
+  assignee_id: number | null;
+  created_at: string;
+  updated_at: string;
+  // Populated fields from joins
+  assignee?: Person | null;
+  co_assignees?: Person[];
+  tags?: Tag[];
+}
+
+// types/person.ts
+interface Person {
+  id: number;
+  name: string;
+  email: string | null;
+  company: string | null;
+  designation: string | null;
+  project_id: number | null;
+  created_at: string;
+  updated_at: string;
+  // Populated field
+  project?: Project | null;
+}
+
+// types/tag.ts
+interface Tag {
+  id: number;
+  name: string;
+  color: string;
+  project_id: number | null;
+  created_at: string;
+  updated_at: string;
+  // Populated field
+  project?: Project | null;
+}
+
+// types/task-assignee.ts
+type AssigneeRole = 'collaborator' | 'reviewer' | 'observer';
+
+interface TaskAssignee {
+  id: number;
+  task_id: number;
+  person_id: number;
+  role: AssigneeRole;
+  created_at: string;
+  // Populated field
+  person?: Person;
+}
+
+// types/task-tag.ts
+interface TaskTag {
+  id: number;
+  task_id: number;
+  tag_id: number;
+  created_at: string;
+  // Populated field
+  tag?: Tag;
+}
+
+// Create/Update DTOs
+interface CreatePersonDTO {
+  name: string;
+  email?: string;
+  company?: string;
+  designation?: string;
+  project_id?: number;
+}
+
+interface UpdatePersonDTO {
+  name?: string;
+  email?: string;
+  company?: string;
+  designation?: string;
+  project_id?: number | null;
+}
+
+interface CreateTagDTO {
+  name: string;
+  color?: string;
+  project_id?: number;
+}
+
+interface UpdateTagDTO {
+  name?: string;
+  color?: string;
+  project_id?: number | null;
+}
+
+interface AssignPersonDTO {
+  person_id: number;
+  role?: AssigneeRole;
+}
+
+interface TagTaskDTO {
+  tag_id: number;
+}
+
+// Extended Task Filters
+interface TaskFilters {
+  project_id?: number;
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  due_date_from?: string;
+  due_date_to?: string;
+  search?: string;
+  assignee_id?: number;
+  tag_id?: number;
 }
 ```
 
@@ -403,6 +618,142 @@ http://localhost:3001/api
 // Response: { success: true, data: Task }
 
 // DELETE /api/tasks/:id
+// Response: { success: true, message: string }
+```
+
+### People API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/people` | Get all people (with optional project filter) |
+| GET | `/people/:id` | Get single person |
+| POST | `/people` | Create new person |
+| PUT | `/people/:id` | Update person |
+| DELETE | `/people/:id` | Delete person |
+
+#### People Endpoints Detail
+
+```typescript
+// GET /api/people?project_id=xxx
+// Query params: project_id (optional)
+// Response: { success: true, data: Person[] }
+
+// GET /api/people/:id
+// Response: { success: true, data: Person }
+
+// POST /api/people
+// Body: {
+//   name: string,
+//   email?: string,
+//   company?: string,
+//   designation?: string,
+//   project_id?: number
+// }
+// Response: { success: true, data: Person }
+
+// PUT /api/people/:id
+// Body: {
+//   name?: string,
+//   email?: string,
+//   company?: string,
+//   designation?: string,
+//   project_id?: number | null
+// }
+// Response: { success: true, data: Person }
+
+// DELETE /api/people/:id
+// Response: { success: true, message: string }
+```
+
+### Tags API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/tags` | Get all tags (with optional project filter) |
+| GET | `/tags/:id` | Get single tag |
+| POST | `/tags` | Create new tag |
+| PUT | `/tags/:id` | Update tag |
+| DELETE | `/tags/:id` | Delete tag |
+
+#### Tags Endpoints Detail
+
+```typescript
+// GET /api/tags?project_id=xxx
+// Query params: project_id (optional - returns global and project-specific tags)
+// Response: { success: true, data: Tag[] }
+
+// GET /api/tags/:id
+// Response: { success: true, data: Tag }
+
+// POST /api/tags
+// Body: {
+//   name: string,
+//   color?: string,
+//   project_id?: number (null for global tags)
+// }
+// Response: { success: true, data: Tag }
+
+// PUT /api/tags/:id
+// Body: {
+//   name?: string,
+//   color?: string,
+//   project_id?: number | null
+// }
+// Response: { success: true, data: Tag }
+
+// DELETE /api/tags/:id
+// Response: { success: true, message: string }
+```
+
+### Task Assignees API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/tasks/:id/assignees` | Get all assignees for a task |
+| POST | `/tasks/:id/assignees` | Add co-assignee to task |
+| DELETE | `/tasks/:id/assignees/:personId` | Remove co-assignee from task |
+| PUT | `/tasks/:id/assignee` | Set primary assignee |
+
+#### Task Assignees Endpoints Detail
+
+```typescript
+// GET /api/tasks/:id/assignees
+// Response: { success: true, data: TaskAssignee[] }
+
+// POST /api/tasks/:id/assignees
+// Body: {
+//   person_id: number,
+//   role?: 'collaborator' | 'reviewer' | 'observer'
+// }
+// Response: { success: true, data: TaskAssignee }
+
+// DELETE /api/tasks/:id/assignees/:personId
+// Response: { success: true, message: string }
+
+// PUT /api/tasks/:id/assignee
+// Body: { assignee_id: number | null }
+// Response: { success: true, data: Task }
+```
+
+### Task Tags API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/tasks/:id/tags` | Get all tags for a task |
+| POST | `/tasks/:id/tags` | Add tag to task |
+| DELETE | `/tasks/:id/tags/:tagId` | Remove tag from task |
+
+#### Task Tags Endpoints Detail
+
+```typescript
+// GET /api/tasks/:id/tags
+// Response: { success: true, data: Tag[] }
+
+// POST /api/tasks/:id/tags
+// Body: { tag_id: number }
+// Response: { success: true, data: TaskTag }
+
+// DELETE /api/tasks/:id/tags/:tagId
 // Response: { success: true, message: string }
 ```
 
@@ -544,16 +895,30 @@ This application uses **React Context API** for state management. Given the sing
 graph TD
     A[AppContext - Application-wide state] --> B[ProjectContext - Projects state]
     A --> C[TaskContext - Tasks state]
+    A --> D[PeopleContext - People state]
+    A --> E[TagContext - Tags state]
     
-    B --> D[projects array]
-    B --> E[currentProject]
-    B --> F[loading states]
-    B --> G[CRUD operations]
+    B --> F[projects array]
+    B --> G[currentProject]
+    B --> H[loading states]
+    B --> I[CRUD operations]
     
-    C --> H[tasks array]
-    C --> I[filters]
-    C --> J[loading states]
-    C --> K[CRUD operations]
+    C --> J[tasks array]
+    C --> K[filters]
+    C --> L[loading states]
+    C --> M[CRUD operations]
+    C --> N[assignee management]
+    C --> O[tag management]
+    
+    D --> P[people array]
+    D --> Q[projectPeople]
+    D --> R[loading states]
+    D --> S[CRUD operations]
+    
+    E --> T[tags array]
+    E --> U[projectTags]
+    E --> V[loading states]
+    E --> W[CRUD operations]
 ```
 
 ### Context Implementations
@@ -599,10 +964,58 @@ interface ProjectContextType {
 }
 ```
 
-#### TaskContext
+#### PeopleContext
 
 ```typescript
-// context/TaskContext.tsx
+// context/PeopleContext.tsx
+interface PeopleContextType {
+  // State
+  people: Person[];
+  projectPeople: Person[];  // People filtered by current project
+  loading: boolean;
+  error: string | null;
+  
+  // Actions
+  fetchPeople: (projectId?: number) => Promise<void>;
+  fetchPerson: (id: number) => Promise<Person>;
+  createPerson: (data: CreatePersonDTO) => Promise<Person>;
+  updatePerson: (id: number, data: UpdatePersonDTO) => Promise<Person>;
+  deletePerson: (id: number) => Promise<void>;
+  
+  // Helpers
+  getPersonById: (id: number) => Person | undefined;
+  getPeopleByProject: (projectId: number) => Person[];
+}
+```
+
+#### TagContext
+
+```typescript
+// context/TagContext.tsx
+interface TagContextType {
+  // State
+  tags: Tag[];
+  projectTags: Tag[];  // Tags available for current project (global + project-specific)
+  loading: boolean;
+  error: string | null;
+  
+  // Actions
+  fetchTags: (projectId?: number) => Promise<void>;
+  fetchTag: (id: number) => Promise<Tag>;
+  createTag: (data: CreateTagDTO) => Promise<Tag>;
+  updateTag: (id: number, data: UpdateTagDTO) => Promise<Tag>;
+  deleteTag: (id: number) => Promise<void>;
+  
+  // Helpers
+  getTagById: (id: number) => Tag | undefined;
+  getTagsForProject: (projectId: number | null) => Tag[];
+}
+```
+
+#### Extended TaskContext
+
+```typescript
+// context/TaskContext.tsx - Extended with assignee and tag support
 interface TaskContextType {
   // State
   tasks: Task[];
@@ -615,21 +1028,38 @@ interface TaskContextType {
   setFilters: (filters: TaskFilters) => void;
   clearFilters: () => void;
   
-  // Actions
-  fetchTasks: (projectId?: string) => Promise<void>;
+  // Task CRUD
+  fetchTasks: (projectId?: number) => Promise<void>;
+  fetchTask: (id: number) => Promise<Task>;
   createTask: (data: CreateTaskDTO) => Promise<Task>;
-  updateTask: (id: string, data: UpdateTaskDTO) => Promise<Task>;
-  updateTaskStatus: (id: string, status: TaskStatus) => Promise<Task>;
-  deleteTask: (id: string) => Promise<void>;
+  updateTask: (id: number, data: UpdateTaskDTO) => Promise<Task>;
+  updateTaskStatus: (id: number, status: TaskStatus) => Promise<Task>;
+  deleteTask: (id: number) => Promise<void>;
+  
+  // Primary Assignee Management
+  setPrimaryAssignee: (taskId: number, personId: number | null) => Promise<Task>;
+  
+  // Co-Assignee Management
+  fetchCoAssignees: (taskId: number) => Promise<Person[]>;
+  addCoAssignee: (taskId: number, personId: number, role?: AssigneeRole) => Promise<TaskAssignee>;
+  removeCoAssignee: (taskId: number, personId: number) => Promise<void>;
+  
+  // Tag Management
+  fetchTaskTags: (taskId: number) => Promise<Tag[]>;
+  addTagToTask: (taskId: number, tagId: number) => Promise<TaskTag>;
+  removeTagFromTask: (taskId: number, tagId: number) => Promise<void>;
 }
 
+// Extended Task Filters
 interface TaskFilters {
-  projectId?: string;
+  project_id?: number;
   status?: TaskStatus;
   priority?: TaskPriority;
-  dueDateFrom?: string;
-  dueDateTo?: string;
-  searchQuery?: string;
+  due_date_from?: string;
+  due_date_to?: string;
+  search?: string;
+  assignee_id?: number;
+  tag_id?: number;
 }
 ```
 
@@ -638,21 +1068,21 @@ interface TaskFilters {
 ```mermaid
 sequenceDiagram
     participant UI as UI Component
-    participant Context as Context Provider
-    participant Service as API Service
+    participant Context as Context Providers
+    participant Service as API Services
     participant Backend as Express Server
-    participant DB as SQLite
+    participant Database as SQLite
     
     UI->>Context: User action triggers context function
     Context->>Context: Update loading state
-    Context->>Service: Call API service
-    Service->>Backend: HTTP request
-    Backend->>DB: SQL query
-    DB-->>Backend: Result set
-    Backend-->>Service: JSON response
+    Context->>Service: Call API services
+    Service->>Backend: HTTP requests
+    Backend->>Database: SQL queries
+    Database-->>Backend: Result sets
+    Backend-->>Service: JSON responses
     Service-->>Context: Return data
     Context->>Context: Update state with data
-    Context-->>UI: Re-render with new state
+    Context-->>UI: Re-render components
 ```
 
 ---
@@ -941,17 +1371,16 @@ sequenceDiagram
     participant U as User
     participant TF as TaskForm
     participant TC as TaskContext
-    participant TS as taskService
     participant API as Express API
-    participant DB as SQLite
+    participant Database as SQLite
     
     U->>TF: Fill task form
     TF->>TF: Validate input
     TF->>TC: createTask with data
     TC->>TS: POST /api/tasks
     TS->>API: HTTP request
-    API->>DB: INSERT INTO tasks
-    DB-->>API: Success with new ID
+    API->>Database: INSERT INTO tasks
+    Database-->>API: Success with new ID
     API-->>TS: 201 Created with task
     TS-->>TC: Return new task
     TC->>TC: Update tasks array
