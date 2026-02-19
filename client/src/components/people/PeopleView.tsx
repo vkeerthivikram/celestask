@@ -57,6 +57,13 @@ export function PeopleView() {
     return project?.name || 'Unknown Project';
   }, [projects]);
   
+  // Get project color by ID
+  const getProjectColor = useCallback((projectId: number | undefined): string => {
+    if (!projectId) return '#6b7280';
+    const project = projects.find(p => p.id === projectId);
+    return project?.color || '#6b7280';
+  }, [projects]);
+  
   // Handle create person
   const handleCreatePerson = async (data: CreatePersonDTO | UpdatePersonDTO) => {
     setIsSubmitting(true);
@@ -233,6 +240,7 @@ export function PeopleView() {
                 key={person.id}
                 person={person}
                 projectName={getProjectName(person.project_id)}
+                projectColor={getProjectColor(person.project_id)}
                 onEdit={() => setEditingPerson(person)}
                 onDelete={() => setDeletingPerson(person)}
               />
@@ -294,11 +302,12 @@ export function PeopleView() {
 interface PersonCardProps {
   person: Person;
   projectName: string;
+  projectColor: string;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-function PersonCard({ person, projectName, onEdit, onDelete }: PersonCardProps) {
+function PersonCard({ person, projectName, projectColor, onEdit, onDelete }: PersonCardProps) {
   const [showMenu, setShowMenu] = useState(false);
   
   return (
@@ -393,7 +402,7 @@ function PersonCard({ person, projectName, onEdit, onDelete }: PersonCardProps) 
             <>
               <div
                 className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: projects.find(p => p.id === person.project_id)?.color || '#6b7280' }}
+                style={{ backgroundColor: projectColor }}
               />
               <span className="truncate">{projectName}</span>
             </>
