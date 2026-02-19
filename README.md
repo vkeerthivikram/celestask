@@ -156,8 +156,9 @@ A **local-first, single-user** project management web application inspired by Ji
 
 ## ⚙️ Prerequisites
 
-- **Node.js** >= 18.0.0
+- **Node.js** 22.x or 24.x
 - **npm** >= 9.0.0 or **yarn** >= 1.22.0
+- **nvm** (recommended for automatic per-project Node version)
 
 Check your versions:
 ```bash
@@ -175,7 +176,17 @@ git clone <repository-url>
 cd task-tracking
 ```
 
-### 2. Install Dependencies
+### 2. Select Node Version (Recommended)
+
+```bash
+# Use project-pinned version from .nvmrc
+nvm use || nvm install
+
+# Verify
+node --version
+```
+
+### 3. Install Dependencies
 
 **Option A: Using npm (manual)**
 ```bash
@@ -203,7 +214,7 @@ make install
 Install-All
 ```
 
-### 3. Start the Development Servers
+### 4. Start the Development Servers
 
 **Option A: Using npm**
 ```bash

@@ -1,2 +1,10 @@
 node_modules/
 */node_modules/
+.agent/
+_bmad/
+_bmad-output/
+.github/agents/
+.github/prompts/
+.opencode/
+.kilocode/
+.kilocodemodes
