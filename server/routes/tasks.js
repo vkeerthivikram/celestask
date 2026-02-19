@@ -1227,7 +1227,7 @@ router.get('/:id/tags', (req, res) => {
     }
     
     const tags = db.prepare(`
-      SELECT tg.*, tt.id as task_tag_id
+      SELECT tg.* 
       FROM tags tg 
       JOIN task_tags tt ON tg.id = tt.tag_id 
       WHERE tt.task_id = ?
@@ -1349,6 +1349,444 @@ router.delete('/:id/tags/:tagId', (req, res) => {
       error: { 
         code: 'DELETE_ERROR', 
         message: 'Failed to remove task tag' 
+      } 
+    });
+  }
+});
+
+// ==================== BULK OPERATIONS ENDPOINTS ====================
+
+// PUT /api/tasks/bulk - Bulk update multiple tasks
+router.put('/bulk', (req, res) => {
+  try {
+    const { taskIds, updates } = req.body;
+    
+    // Validate taskIds
+    if (!taskIds || !Array.isArray(taskIds) || taskIds.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: { 
+          code: 'VALIDATION_ERROR', 
+          message: 'taskIds must be a non-empty array' 
+        } 
+      });
+    }
+    
+    // Validate updates
+    if (!updates || typeof updates !== 'object') {
+      return res.status(400).json({ 
+        success: false, 
+        error: { 
+          code: 'VALIDATION_ERROR', 
+          message: 'updates object is required' 
+        } 
+      });
+    }
+    
+    // Validate status if provided
+    if (updates.status !== undefined && !VALID_STATUSES.includes(updates.status)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: { 
+          code: 'VALIDATION_ERROR', 
+          message: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` 
+        } 
+      });
+    }
+    
+    // Validate priority if provided
+    if (updates.priority !== undefined && !VALID_PRIORITIES.includes(updates.priority)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: { 
+          code: 'VALIDATION_ERROR', 
+          message: `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(', ')}` 
+        } 
+      });
+    }
+    
+    // Validate assignee_id if provided
+    if (updates.assignee_id !== undefined && updates.assignee_id !== null) {
+      const person = db.prepare('SELECT id FROM people WHERE id = ?').get(updates.assignee_id);
+      if (!person) {
+        return res.status(400).json({ 
+          success: false, 
+          error: { 
+            code: 'VALIDATION_ERROR', 
+            message: 'Assignee not found' 
+          } 
+        });
+      }
+    }
+    
+    // Build the update query dynamically
+    const setClauses = [];
+    const params = [];
+    
+    if (updates.status !== undefined) {
+      setClauses.push('status = ?');
+      params.push(updates.status);
+    }
+    
+    if (updates.priority !== undefined) {
+      setClauses.push('priority = ?');
+      params.push(updates.priority);
+    }
+    
+    if (updates.assignee_id !== undefined) {
+      setClauses.push('assignee_id = ?');
+      params.push(updates.assignee_id);
+    }
+    
+    if (setClauses.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: { 
+          code: 'VALIDATION_ERROR', 
+          message: 'No valid updates provided' 
+        } 
+      });
+    }
+    
+    // Add updated_at timestamp
+    setClauses.push('updated_at = CURRENT_TIMESTAMP');
+    
+    // Build the WHERE clause with placeholders
+    const placeholders = taskIds.map(() => '?').join(',');
+    const updateQuery = `UPDATE tasks SET ${setClauses.join(', ')} WHERE id IN (${placeholders})`;
+    
+    // Combine params with taskIds
+    const allParams = [...params, ...taskIds];
+    
+    // Execute the bulk update
+    const result = db.prepare(updateQuery).run(...allParams);
+    
+    // Fetch the updated tasks
+    const fetchQuery = `SELECT * FROM tasks WHERE id IN (${placeholders})`;
+    const updatedTasks = db.prepare(fetchQuery).all(...taskIds);
+    
+    res.json({ 
+      success: true, 
+      data: {
+        updated: result.changes,
+        tasks: updatedTasks
+      }
+    });
+  } catch (error) {
+    console.error('Error performing bulk update:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: { 
+        code: 'UPDATE_ERROR', 
+        message: 'Failed to perform bulk update' 
+      } 
+    });
+  }
+});
+
+// ==================== CUSTOM FIELD VALUE ENDPOINTS ====================
+
+// GET /api/tasks/:id/custom-fields - Get all custom field values for a task
+router.get('/:id/custom-fields', (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if task exists
+    const task = db.prepare('SELECT id FROM tasks WHERE id = ?').get(id);
+    if (!task) {
+      return res.status(404).json({ 
+        success: false, 
+        error: { 
+          code: 'NOT_FOUND', 
+          message: 'Task not found' 
+        } 
+      });
+    }
+    
+    // Get all custom field values with their field definitions
+    const fieldValues = db.prepare(`
+      SELECT cfv.id, cfv.task_id, cfv.custom_field_id, cfv.value, 
+             cfv.created_at, cfv.updated_at,
+             cf.id as 'custom_field.id', cf.name as 'custom_field.name', 
+             cf.field_type as 'custom_field.field_type', cf.project_id as 'custom_field.project_id',
+             cf.options as 'custom_field.options', cf.required as 'custom_field.required',
+             cf.sort_order as 'custom_field.sort_order'
+      FROM custom_field_values cfv
+      JOIN custom_fields cf ON cfv.custom_field_id = cf.id
+      WHERE cfv.task_id = ?
+      ORDER BY cf.sort_order ASC
+    `).all(id);
+    
+    // Transform the flat results into nested objects
+    const transformedValues = fieldValues.map(fv => ({
+      id: fv.id,
+      task_id: fv.task_id,
+      custom_field_id: fv.custom_field_id,
+      value: fv.value,
+      created_at: fv.created_at,
+      updated_at: fv.updated_at,
+      custom_field: {
+        id: fv['custom_field.id'],
+        name: fv['custom_field.name'],
+        field_type: fv['custom_field.field_type'],
+        project_id: fv['custom_field.project_id'],
+        options: fv['custom_field.options'] ? JSON.parse(fv['custom_field.options']) : null,
+        required: fv['custom_field.required'] === 1,
+        sort_order: fv['custom_field.sort_order']
+      }
+    }));
+    
+    res.json({ success: true, data: transformedValues });
+  } catch (error) {
+    console.error('Error fetching task custom field values:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: { 
+        code: 'FETCH_ERROR', 
+        message: 'Failed to fetch task custom field values' 
+      } 
+    });
+  }
+});
+
+// PUT /api/tasks/:id/custom-fields/:fieldId - Set custom field value (create or update)
+router.put('/:id/custom-fields/:fieldId', (req, res) => {
+  try {
+    const { id, fieldId } = req.params;
+    const { value } = req.body;
+    
+    // Check if task exists
+    const task = db.prepare('SELECT id, project_id FROM tasks WHERE id = ?').get(id);
+    if (!task) {
+      return res.status(404).json({ 
+        success: false, 
+        error: { 
+          code: 'NOT_FOUND', 
+          message: 'Task not found' 
+        } 
+      });
+    }
+    
+    // Check if custom field exists and is applicable to this task
+    const customField = db.prepare('SELECT * FROM custom_fields WHERE id = ?').get(fieldId);
+    if (!customField) {
+      return res.status(404).json({ 
+        success: false, 
+        error: { 
+          code: 'NOT_FOUND', 
+          message: 'Custom field not found' 
+        } 
+      });
+    }
+    
+    // Check if field is global or belongs to the task's project
+    if (customField.project_id !== null && customField.project_id !== task.project_id) {
+      return res.status(400).json({ 
+        success: false, 
+        error: { 
+          code: 'VALIDATION_ERROR', 
+          message: 'Custom field does not belong to this task\'s project' 
+        } 
+      });
+    }
+    
+    // Validate value based on field type
+    if (value !== null && value !== undefined) {
+      switch (customField.field_type) {
+        case 'number':
+          if (typeof value !== 'number') {
+            return res.status(400).json({ 
+              success: false, 
+              error: { 
+                code: 'VALIDATION_ERROR', 
+                message: 'Value must be a number for number field type' 
+              } 
+            });
+          }
+          break;
+        case 'checkbox':
+          if (typeof value !== 'boolean') {
+            return res.status(400).json({ 
+              success: false, 
+              error: { 
+                code: 'VALIDATION_ERROR', 
+                message: 'Value must be a boolean for checkbox field type' 
+              } 
+            });
+          }
+          break;
+        case 'select':
+          // Validate that value is one of the options
+          if (customField.options) {
+            const options = JSON.parse(customField.options);
+            if (!options.includes(value)) {
+              return res.status(400).json({ 
+                success: false, 
+                error: { 
+                  code: 'VALIDATION_ERROR', 
+                  message: `Value must be one of: ${options.join(', ')}` 
+                } 
+              });
+            }
+          }
+          break;
+        case 'multiselect':
+          // Validate that value is an array and all values are valid options
+          if (!Array.isArray(value)) {
+            return res.status(400).json({ 
+              success: false, 
+              error: { 
+                code: 'VALIDATION_ERROR', 
+                message: 'Value must be an array for multiselect field type' 
+              } 
+            });
+          }
+          if (customField.options) {
+            const options = JSON.parse(customField.options);
+            const invalidValues = value.filter(v => !options.includes(v));
+            if (invalidValues.length > 0) {
+              return res.status(400).json({ 
+                success: false, 
+                error: { 
+                  code: 'VALIDATION_ERROR', 
+                  message: `Invalid values: ${invalidValues.join(', ')}. Must be one of: ${options.join(', ')}` 
+                } 
+              });
+            }
+          }
+          break;
+        case 'text':
+        case 'url':
+          if (typeof value !== 'string') {
+            return res.status(400).json({ 
+              success: false, 
+              error: { 
+                code: 'VALIDATION_ERROR', 
+                message: `Value must be a string for ${customField.field_type} field type` 
+              } 
+            });
+          }
+          break;
+        case 'date':
+          // Validate date format (YYYY-MM-DD or ISO string)
+          if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(value)) {
+            return res.status(400).json({ 
+              success: false, 
+              error: { 
+                code: 'VALIDATION_ERROR', 
+                message: 'Value must be a valid date string (YYYY-MM-DD) for date field type' 
+              } 
+            });
+          }
+          break;
+      }
+    }
+    
+    // Serialize value for storage
+    let storedValue = value;
+    if (Array.isArray(value)) {
+      storedValue = JSON.stringify(value);
+    } else if (typeof value === 'boolean') {
+      storedValue = value ? 'true' : 'false';
+    } else if (value === null || value === undefined) {
+      storedValue = null;
+    } else {
+      storedValue = String(value);
+    }
+    
+    // Check if value already exists
+    const existingValue = db.prepare(`
+      SELECT id FROM custom_field_values WHERE task_id = ? AND custom_field_id = ?
+    `).get(id, fieldId);
+    
+    if (existingValue) {
+      // Update existing value
+      db.prepare(`
+        UPDATE custom_field_values 
+        SET value = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `).run(storedValue, existingValue.id);
+    } else {
+      // Create new value
+      const valueId = crypto.randomUUID();
+      db.prepare(`
+        INSERT INTO custom_field_values (id, task_id, custom_field_id, value) 
+        VALUES (?, ?, ?, ?)
+      `).run(valueId, id, fieldId, storedValue);
+    }
+    
+    // Fetch the updated/created value with field definition
+    const result = db.prepare(`
+      SELECT cfv.id, cfv.task_id, cfv.custom_field_id, cfv.value, 
+             cfv.created_at, cfv.updated_at,
+             cf.id as 'custom_field.id', cf.name as 'custom_field.name', 
+             cf.field_type as 'custom_field.field_type', cf.project_id as 'custom_field.project_id',
+             cf.options as 'custom_field.options', cf.required as 'custom_field.required',
+             cf.sort_order as 'custom_field.sort_order'
+      FROM custom_field_values cfv
+      JOIN custom_fields cf ON cfv.custom_field_id = cf.id
+      WHERE cfv.task_id = ? AND cfv.custom_field_id = ?
+    `).get(id, fieldId);
+    
+    // Transform the result
+    const transformedResult = {
+      id: result.id,
+      task_id: result.task_id,
+      custom_field_id: result.custom_field_id,
+      value: result.value,
+      created_at: result.created_at,
+      updated_at: result.updated_at,
+      custom_field: {
+        id: result['custom_field.id'],
+        name: result['custom_field.name'],
+        field_type: result['custom_field.field_type'],
+        project_id: result['custom_field.project_id'],
+        options: result['custom_field.options'] ? JSON.parse(result['custom_field.options']) : null,
+        required: result['custom_field.required'] === 1,
+        sort_order: result['custom_field.sort_order']
+      }
+    };
+    
+    res.json({ success: true, data: transformedResult });
+  } catch (error) {
+    console.error('Error setting task custom field value:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: { 
+        code: 'UPDATE_ERROR', 
+        message: 'Failed to set task custom field value' 
+      } 
+    });
+  }
+});
+
+// DELETE /api/tasks/:id/custom-fields/:fieldId - Remove custom field value
+router.delete('/:id/custom-fields/:fieldId', (req, res) => {
+  try {
+    const { id, fieldId } = req.params;
+    
+    const result = db.prepare(`
+      DELETE FROM custom_field_values WHERE task_id = ? AND custom_field_id = ?
+    `).run(id, fieldId);
+    
+    if (result.changes === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: { 
+          code: 'NOT_FOUND', 
+          message: 'Custom field value not found for this task' 
+        } 
+      });
+    }
+    
+    res.json({ success: true, message: 'Custom field value removed from task' });
+  } catch (error) {
+    console.error('Error removing task custom field value:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: { 
+        code: 'DELETE_ERROR', 
+        message: 'Failed to remove task custom field value' 
       } 
     });
   }

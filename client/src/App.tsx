@@ -6,6 +6,11 @@ import { TaskProvider } from './context/TaskContext';
 import { PeopleProvider } from './context/PeopleContext';
 import { TagProvider } from './context/TagContext';
 import { NoteProvider } from './context/NoteContext';
+import { ShortcutProvider } from './context/ShortcutContext';
+import { ToastProvider } from './context/ToastContext';
+import { CommandPaletteProvider } from './context/CommandPaletteContext';
+import { CustomFieldProvider } from './context/CustomFieldContext';
+import { SavedViewProvider } from './context/SavedViewContext';
 import { Layout } from './components/layout/Layout';
 import { KanbanBoard } from './components/kanban/KanbanBoard';
 import { ListView } from './components/list/ListView';
@@ -13,6 +18,9 @@ import { CalendarView } from './components/calendar/CalendarView';
 import { TimelineView } from './components/timeline/TimelineView';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { PeopleView } from './components/people/PeopleView';
+import { ToastContainer } from './components/common/ToastContainer';
+import { ShortcutHelp } from './components/common/ShortcutHelp';
+import { CommandPalette } from './components/common/CommandPalette';
 import type { ViewType } from './types';
 
 // TaskProviderWrapper - provides TaskProvider at Layout level so Layout can use useTasks()
@@ -283,11 +291,24 @@ function App() {
       <ProjectProvider>
         <PeopleProvider>
           <TagProvider>
-            <TaskProviderWrapper>
-              <NoteProvider>
-                <AppContent />
-              </NoteProvider>
-            </TaskProviderWrapper>
+            <ToastProvider>
+              <ShortcutProvider>
+                <CommandPaletteProvider>
+                  <CustomFieldProvider>
+                    <TaskProviderWrapper>
+                      <SavedViewProvider>
+                        <NoteProvider>
+                          <AppContent />
+                          <ToastContainer />
+                          <ShortcutHelp />
+                          <CommandPalette />
+                        </NoteProvider>
+                      </SavedViewProvider>
+                    </TaskProviderWrapper>
+                  </CustomFieldProvider>
+                </CommandPaletteProvider>
+              </ShortcutProvider>
+            </ToastProvider>
           </TagProvider>
         </PeopleProvider>
       </ProjectProvider>

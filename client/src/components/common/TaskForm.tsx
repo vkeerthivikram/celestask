@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { ClipboardList, Calendar, Flag, Loader2, User, Tag, X, Plus, Clock, GitBranch, Users } from 'lucide-react';
-import type { Task, Project, CreateTaskDTO, UpdateTaskDTO, TaskStatus, TaskPriority, Person, Tag as TagType } from '../../types';
+import { ClipboardList, Calendar, Flag, Loader2, User, Tag, X, Plus, Clock, GitBranch, Users, FormInput } from 'lucide-react';
+import type { Task, Project, CreateTaskDTO, UpdateTaskDTO, TaskStatus, TaskPriority, Person, Tag as TagType, CustomFieldValue, CustomField } from '../../types';
 import { STATUS_CONFIG, PRIORITY_CONFIG } from '../../types';
 import { Button } from './Button';
 import { TagBadge } from './Badge';
 import { MiniProgressBar } from './ProgressBar';
+import CustomFieldInput from './CustomFieldInput';
 import { usePeople } from '../../context/PeopleContext';
 import { useTags } from '../../context/TagContext';
 import { useTasks } from '../../context/TaskContext';
+import { useCustomFields } from '../../context/CustomFieldContext';
 
 interface TaskFormProps {
   task?: Task | null;
@@ -57,6 +59,10 @@ export function TaskForm({
   const { projectPeople, people } = usePeople();
   const { availableTags } = useTags();
   const { tasks } = useTasks();
+  const { availableFields, fetchCustomFields, fetchTaskCustomFields, setTaskCustomField, getTaskFieldValue } = useCustomFields();
+  
+  // Custom field values state (fieldId -> value)
+  const [customFieldValues, setCustomFieldValues] = useState<Map<string, any>>(new Map());
   
   // Get available parent tasks (tasks from same project, excluding self and descendants)
   const availableParentTasks = useMemo(() => {
@@ -142,6 +148,37 @@ export function TaskForm({
     }
   }, [task, propParentTaskId]);
   
+  // Fetch custom fields when project changes
+  useEffect(() => {
+    if (currentProjectId) {
+      fetchCustomFields(String(currentProjectId));
+    } else {
+      fetchCustomFields(); // Fetch global fields only
+    }
+  }, [currentProjectId, fetchCustomFields]);
+  
+  // Load existing custom field values when editing
+  useEffect(() => {
+    if (task && availableFields.length > 0) {
+      // Fetch existing values from API
+      fetchTaskCustomFields(task.id);
+    }
+  }, [task, availableFields, fetchTaskCustomFields]);
+  
+  // Update local state when task field values are loaded
+  useEffect(() => {
+    if (task && availableFields.length > 0) {
+      const values = new Map<string, any>();
+      availableFields.forEach(field => {
+        const fieldValue = getTaskFieldValue(task.id, field.id);
+        if (fieldValue) {
+          values.set(field.id, fieldValue.value);
+        }
+      });
+      setCustomFieldValues(values);
+    }
+  }, [task, availableFields, getTaskFieldValue]);
+  
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
     
@@ -196,9 +233,28 @@ export function TaskForm({
       };
       
       await onSubmit(data);
+      
+      // Save custom field values after task is saved
+      // Note: For new tasks, we need the task ID from the response
+      // This is handled by the parent component passing the task back
+      if (task?.id) {
+        // Save custom field values for existing task
+        for (const [fieldId, value] of customFieldValues) {
+          await setTaskCustomField(task.id, fieldId, value);
+        }
+      }
     } catch {
       // Error handling is done by the parent component
     }
+  };
+  
+  // Handle custom field value change
+  const handleCustomFieldChange = (fieldId: string, value: any) => {
+    setCustomFieldValues(prev => {
+      const newValues = new Map(prev);
+      newValues.set(fieldId, value);
+      return newValues;
+    });
   };
   
   const handleInputChange = (
@@ -353,7 +409,7 @@ export function TaskForm({
           className={twMerge(
             clsx(
               'w-full px-3 py-2 rounded-md border shadow-sm resize-none',
-              'bg-white dark:bg-gray-900',
+              'bg:white dark:bg-gray-900',
               'text-gray-900 dark:text-gray-100',
               'placeholder-gray-400 dark:placeholder-gray-500',
               'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
@@ -535,7 +591,7 @@ export function TaskForm({
               className={twMerge(
                 clsx(
                   'w-full px-3 py-1.5 rounded-md border shadow-sm text-sm',
-                  'bg-white dark:bg-gray-900',
+                  'bg:white dark:bg-gray-900',
                   'text-gray-900 dark:text-gray-100',
                   'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
                   'border-gray-300 dark:border-gray-600'
@@ -568,7 +624,7 @@ export function TaskForm({
               className={twMerge(
                 clsx(
                   'w-full px-3 py-1.5 rounded-md border shadow-sm text-sm',
-                  'bg-white dark:bg-gray-900',
+                  'bg:white dark:bg-gray-900',
                   'text-gray-900 dark:text-gray-100',
                   'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
                   'border-gray-300 dark:border-gray-600'
@@ -807,6 +863,27 @@ export function TaskForm({
         )}
       </div>
       
+      {/* Custom Fields */}
+      {availableFields.length > 0 && (
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <FormInput className="w-4 h-4 inline-block mr-1" />
+            Custom Fields
+          </label>
+          <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-md space-y-3">
+            {availableFields.map(field => (
+              <CustomFieldInput
+                key={field.id}
+                field={field}
+                value={customFieldValues.get(field.id)}
+                onChange={(value) => handleCustomFieldChange(field.id, value)}
+                disabled={isLoading}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      
       {/* Date Range */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Start Date */}
@@ -827,7 +904,7 @@ export function TaskForm({
             className={twMerge(
               clsx(
                 'w-full px-3 py-2 rounded-md border shadow-sm',
-                'bg-white dark:bg-gray-900',
+                'bg:white dark:bg-gray-900',
                 'text-gray-900 dark:text-gray-100',
                 'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
                 errors.start_date
@@ -860,7 +937,7 @@ export function TaskForm({
             className={twMerge(
               clsx(
                 'w-full px-3 py-2 rounded-md border shadow-sm',
-                'bg-white dark:bg-gray-900',
+                'bg:white dark:bg-gray-900',
                 'text-gray-900 dark:text-gray-100',
                 'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
                 errors.due_date

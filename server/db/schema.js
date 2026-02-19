@@ -218,6 +218,79 @@ function createTables() {
     console.error('Error creating project_assignees table:', error.message);
   }
 
+  // ==================== MIGRATION: Add v1.6.0 tables ====================
+  
+  // Create custom_fields table for custom field definitions
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS custom_fields (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        field_type TEXT NOT NULL CHECK (field_type IN ('text', 'number', 'date', 'select', 'multiselect', 'checkbox', 'url')),
+        project_id INTEGER,
+        options TEXT,
+        required INTEGER DEFAULT 0,
+        sort_order INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `);
+    
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_custom_fields_project ON custom_fields(project_id)`);
+    console.log('Created custom_fields table');
+  } catch (error) {
+    console.error('Error creating custom_fields table:', error.message);
+  }
+
+  // Create custom_field_values table for storing custom field values on tasks
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS custom_field_values (
+        id TEXT PRIMARY KEY,
+        task_id INTEGER NOT NULL,
+        custom_field_id TEXT NOT NULL,
+        value TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (custom_field_id) REFERENCES custom_fields(id) ON DELETE CASCADE,
+        UNIQUE(task_id, custom_field_id)
+      )
+    `);
+    
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_custom_field_values_task ON custom_field_values(task_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_custom_field_values_field ON custom_field_values(custom_field_id)`);
+    console.log('Created custom_field_values table');
+  } catch (error) {
+    console.error('Error creating custom_field_values table:', error.message);
+  }
+
+  // Create saved_views table for saved filter configurations
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS saved_views (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        view_type TEXT NOT NULL CHECK (view_type IN ('list', 'kanban', 'calendar', 'timeline')),
+        project_id INTEGER,
+        filters TEXT NOT NULL,
+        sort_by TEXT,
+        sort_order TEXT DEFAULT 'asc',
+        is_default INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `);
+    
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_saved_views_project ON saved_views(project_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_saved_views_type ON saved_views(view_type)`);
+    console.log('Created saved_views table');
+  } catch (error) {
+    console.error('Error creating saved_views table:', error.message);
+  }
+
   console.log('Database tables created successfully');
 }
 

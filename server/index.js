@@ -12,6 +12,8 @@ const tasksRouter = require('./routes/tasks');
 const peopleRouter = require('./routes/people');
 const tagsRouter = require('./routes/tags');
 const notesRouter = require('./routes/notes');
+const customFieldsRouter = require('./routes/customFields');
+const savedViewsRouter = require('./routes/savedViews');
 
 // Initialize Express app
 const app = express();
@@ -47,6 +49,8 @@ app.use('/api/tasks', tasksRouter);
 app.use('/api/people', peopleRouter);
 app.use('/api/tags', tagsRouter);
 app.use('/api/notes', notesRouter);
+app.use('/api/custom-fields', customFieldsRouter);
+app.use('/api/saved-views', savedViewsRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

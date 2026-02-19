@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
-import type { Task, TaskFilters, CreateTaskDTO, UpdateTaskDTO, TaskStatus, TreeNode, TaskProgressRollup, UpdateTaskProgressDTO } from '../types';
+import type { Task, TaskFilters, CreateTaskDTO, UpdateTaskDTO, TaskStatus, TreeNode, TaskProgressRollup, UpdateTaskProgressDTO, BulkUpdateDTO, BulkUpdateResponse, TaskPriority } from '../types';
 import * as api from '../services/api';
+import { useToast } from './ToastContext';
 
 interface TaskContextType {
   // State
@@ -8,6 +9,12 @@ interface TaskContextType {
   filteredTasks: Task[];
   loading: boolean;
   error: string | null;
+  
+  // Selection State
+  selectedTaskIds: number[];
+  isTaskSelected: (id: number) => boolean;
+  isAllSelected: boolean;
+  isPartialSelected: boolean;
   
   // Filters
   filters: TaskFilters;
@@ -23,6 +30,13 @@ interface TaskContextType {
   updateTaskStatus: (id: number, status: TaskStatus) => Promise<Task>;
   deleteTask: (id: number) => Promise<void>;
   clearError: () => void;
+  
+  // Bulk Actions
+  toggleTaskSelection: (id: number) => void;
+  selectAllTasks: () => void;
+  clearSelection: () => void;
+  bulkUpdateTasks: (updates: { status?: TaskStatus; priority?: TaskPriority; assignee_id?: number | null }) => Promise<BulkUpdateResponse>;
+  bulkDeleteTasks: () => Promise<void>;
   
   // Assignee Actions
   setPrimaryAssignee: (taskId: number, personId: number) => Promise<void>;
@@ -63,6 +77,8 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFiltersState] = useState<TaskFilters>(DEFAULT_FILTERS);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<number[]>([]);
+  const toast = useToast();
   
   // Apply filters to tasks
   const filteredTasks = useMemo(() => {
@@ -115,6 +131,39 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
     
     return result;
   }, [tasks, filters]);
+  
+  // Selection helpers
+  const isTaskSelected = useCallback((id: number): boolean => {
+    return selectedTaskIds.includes(id);
+  }, [selectedTaskIds]);
+  
+  const isAllSelected = useMemo((): boolean => {
+    return filteredTasks.length > 0 && filteredTasks.every(t => selectedTaskIds.includes(t.id));
+  }, [filteredTasks, selectedTaskIds]);
+  
+  const isPartialSelected = useMemo((): boolean => {
+    return selectedTaskIds.length > 0 && !isAllSelected;
+  }, [selectedTaskIds.length, isAllSelected]);
+  
+  // Toggle task selection
+  const toggleTaskSelection = useCallback((id: number): void => {
+    setSelectedTaskIds(prev => 
+      prev.includes(id) 
+        ? prev.filter(taskId => taskId !== id)
+        : [...prev, id]
+    );
+  }, []);
+  
+  // Select all filtered tasks
+  const selectAllTasks = useCallback((): void => {
+    setSelectedTaskIds(filteredTasks.map(t => t.id));
+  }, [filteredTasks]);
+  
+  // Clear selection
+  const clearSelection = useCallback((): void => {
+    setSelectedTaskIds([]);
+  }, []);
+
   
   // Fetch all tasks (optionally with filters)
   const fetchTasks = useCallback(async (fetchFilters?: TaskFilters) => {
@@ -172,15 +221,17 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
     try {
       const newTask = await api.createTask(data);
       setTasks(prev => [...prev, newTask]);
+      toast.success('Task created', `"${newTask.title}" has been created successfully.`);
       return newTask;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create task';
       setError(errorMessage);
+      toast.error('Failed to create task', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
   
   // Update an existing task
   const updateTask = useCallback(async (id: number, data: UpdateTaskDTO): Promise<Task> => {
@@ -192,15 +243,17 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
       setTasks(prev => 
         prev.map(t => t.id === id ? updatedTask : t)
       );
+      toast.success('Task updated', `"${updatedTask.title}" has been updated.`);
       return updatedTask;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update task';
       setError(errorMessage);
+      toast.error('Failed to update task', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
   
   // Update task status (for Kanban drag-and-drop)
   const updateTaskStatus = useCallback(async (id: number, status: TaskStatus): Promise<Task> => {
@@ -229,9 +282,76 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
       );
       const errorMessage = err instanceof Error ? err.message : 'Failed to update task status';
       setError(errorMessage);
+      toast.error('Failed to update status', errorMessage);
       throw new Error(errorMessage);
     }
-  }, [tasks]);
+  }, [tasks, toast]);
+  
+  // Bulk update tasks
+  const bulkUpdateTasks = useCallback(async (updates: { status?: TaskStatus; priority?: TaskPriority; assignee_id?: number | null }): Promise<BulkUpdateResponse> => {
+    if (selectedTaskIds.length === 0) {
+      toast.warning('No tasks selected', 'Please select tasks to update.');
+      return { updated: 0, tasks: [] };
+    }
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const bulkData: BulkUpdateDTO = {
+        taskIds: selectedTaskIds,
+        updates,
+      };
+      const result = await api.bulkUpdateTasks(bulkData);
+      
+      // Update local state with returned tasks
+      setTasks(prev => 
+        prev.map(t => {
+          const updatedTask = result.tasks.find(ut => ut.id === t.id);
+          return updatedTask || t;
+        })
+      );
+      
+      toast.success('Tasks updated', `${result.updated} task${result.updated !== 1 ? 's' : ''} updated successfully.`);
+      clearSelection();
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update tasks';
+      setError(errorMessage);
+      toast.error('Bulk update failed', errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedTaskIds, toast, clearSelection]);
+  
+  // Bulk delete tasks
+  const bulkDeleteTasks = useCallback(async (): Promise<void> => {
+    if (selectedTaskIds.length === 0) {
+      toast.warning('No tasks selected', 'Please select tasks to delete.');
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const result = await api.bulkDeleteTasks(selectedTaskIds);
+      
+      // Remove deleted tasks from local state
+      setTasks(prev => prev.filter(t => !selectedTaskIds.includes(t.id)));
+      
+      toast.success('Tasks deleted', `${result.deleted} task${result.deleted !== 1 ? 's' : ''} deleted successfully.`);
+      clearSelection();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete tasks';
+      setError(errorMessage);
+      toast.error('Bulk delete failed', errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedTaskIds, toast, clearSelection]);
   
   // Set primary assignee
   const setPrimaryAssignee = useCallback(async (taskId: number, personId: number): Promise<void> => {
@@ -354,20 +474,23 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
   
   // Delete a task
   const deleteTask = useCallback(async (id: number): Promise<void> => {
+    const taskToDelete = tasks.find(t => t.id === id);
     setLoading(true);
     setError(null);
     
     try {
       await api.deleteTask(id);
       setTasks(prev => prev.filter(t => t.id !== id));
+      toast.success('Task deleted', taskToDelete ? `"${taskToDelete.title}" has been deleted.` : 'Task has been deleted.');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete task';
       setError(errorMessage);
+      toast.error('Failed to delete task', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tasks, toast]);
   
   // Clear error
   const clearError = useCallback(() => {
@@ -416,15 +539,17 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
     try {
       const newTask = await api.createSubTask(parentId, data);
       setTasks(prev => [...prev, newTask]);
+      toast.success('Subtask created', `"${newTask.title}" has been created as a subtask.`);
       return newTask;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create subtask';
       setError(errorMessage);
+      toast.error('Failed to create subtask', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
   
   // Move a task to a new parent
   const moveTask = useCallback(async (id: number, parentId: number | null): Promise<Task> => {
@@ -436,15 +561,17 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
       setTasks(prev => 
         prev.map(t => t.id === id ? updatedTask : t)
       );
+      toast.success('Task moved', parentId ? 'Task moved to new parent.' : 'Task moved to root level.');
       return updatedTask;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to move task';
       setError(errorMessage);
+      toast.error('Failed to move task', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
   
   // Fetch root tasks for a project (tasks without parents)
   const fetchRootTasks = useCallback(async (projectId: number): Promise<Task[]> => {
@@ -473,15 +600,17 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
       setTasks(prev => 
         prev.map(t => t.id === id ? updatedTask : t)
       );
+      toast.success('Progress updated', `Progress set to ${data.progress_percent ?? updatedTask.progress_percent}%.`);
       return updatedTask;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update task progress';
       setError(errorMessage);
+      toast.error('Failed to update progress', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
   
   // Get task progress rollup (including children progress)
   const getTaskProgressRollup = useCallback(async (id: number): Promise<TaskProgressRollup> => {
@@ -525,6 +654,10 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
     filteredTasks,
     loading,
     error,
+    selectedTaskIds,
+    isTaskSelected,
+    isAllSelected,
+    isPartialSelected,
     filters,
     setFilters,
     updateFilter,
@@ -536,6 +669,11 @@ export function TaskProvider({ children, projectId }: TaskProviderProps) {
     updateTaskStatus,
     deleteTask,
     clearError,
+    toggleTaskSelection,
+    selectAllTasks,
+    clearSelection,
+    bulkUpdateTasks,
+    bulkDeleteTasks,
     setPrimaryAssignee,
     addCoAssignee,
     removeCoAssignee,

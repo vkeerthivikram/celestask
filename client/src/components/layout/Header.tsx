@@ -3,23 +3,16 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import {
   Menu,
-  Plus,
   Moon,
   Sun,
   MoreHorizontal,
-  Settings,
-  Trash2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useProjects } from '../../context/ProjectContext';
-import { Button } from '../common/Button';
+import { QuickAddTask } from '../common/QuickAddTask';
+import { Breadcrumbs } from '../common/Breadcrumbs';
 
-interface HeaderProps {
-  onAddTask?: () => void;
-  onAddProject?: () => void;
-}
-
-export function Header({ onAddTask, onAddProject }: HeaderProps) {
+export function Header() {
   const { sidebarOpen, toggleSidebar, darkMode, toggleDarkMode, currentView } = useApp();
   const { currentProject } = useProjects();
   
@@ -52,8 +45,13 @@ export function Header({ onAddTask, onAddProject }: HeaderProps) {
           <Menu className="w-5 h-5" />
         </button>
         
-        {/* Project Title & View */}
-        <div className="flex flex-col">
+        {/* Breadcrumbs - Desktop */}
+        <div className="hidden md:block">
+          <Breadcrumbs />
+        </div>
+        
+        {/* Project Title & View - Mobile */}
+        <div className="flex flex-col md:hidden">
           <div className="flex items-center gap-2">
             {currentProject && (
               <div
@@ -72,34 +70,13 @@ export function Header({ onAddTask, onAddProject }: HeaderProps) {
         </div>
       </div>
       
+      {/* Center Section - Quick Add Task */}
+      <div className="hidden md:flex flex-1 max-w-xl mx-4">
+        <QuickAddTask className="w-full" />
+      </div>
+      
       {/* Right Section */}
       <div className="flex items-center gap-2">
-        {/* Add Task Button */}
-        {currentProject && onAddTask && (
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Plus className="w-4 h-4" />}
-            onClick={onAddTask}
-            className="hidden sm:inline-flex"
-          >
-            Add Task
-          </Button>
-        )}
-        
-        {/* Mobile Add Button */}
-        {currentProject && onAddTask && (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={onAddTask}
-            className="sm:hidden"
-            aria-label="Add task"
-          >
-            <Plus className="w-4 h-4" />
-          </Button>
-        )}
-        
         {/* Dark Mode Toggle */}
         <button
           onClick={toggleDarkMode}

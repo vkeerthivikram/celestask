@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Inbox, Loader2 } from 'lucide-react';
+import { Inbox, Loader2, Check } from 'lucide-react';
 import { useTasks } from '../../context/TaskContext';
 import { useApp } from '../../context/AppContext';
 import type { Task, TaskStatus, TaskPriority } from '../../types';
@@ -12,6 +12,7 @@ import { SortHeader, type SortKey, type SortOrder } from './SortHeader';
 import { Modal } from '../common/Modal';
 import { ConfirmModal } from '../common/Modal';
 import { TaskForm } from '../common/TaskForm';
+import { BulkActionBar } from '../common/BulkActionBar';
 import type { CreateTaskDTO, UpdateTaskDTO } from '../../types';
 
 const DEFAULT_FILTERS: ListFilters = {
@@ -45,7 +46,22 @@ const STATUS_WEIGHT: Record<TaskStatus, number> = {
 };
 
 export function ListView() {
-  const { tasks, loading, error, updateTask, deleteTask } = useTasks();
+  const { 
+    tasks, 
+    loading, 
+    error, 
+    updateTask, 
+    deleteTask,
+    selectedTaskIds,
+    isTaskSelected,
+    isAllSelected,
+    isPartialSelected,
+    toggleTaskSelection,
+    selectAllTasks,
+    clearSelection,
+    bulkUpdateTasks,
+    bulkDeleteTasks,
+  } = useTasks();
   const { currentProjectId, closeModal, modal } = useApp();
 
   // Local state for filters and sorting
@@ -173,6 +189,32 @@ export function ListView() {
     }
   };
 
+  // Handle select all toggle
+  const handleSelectAll = useCallback(() => {
+    if (isAllSelected(sortedTasks.map(t => t.id))) {
+      clearSelection();
+    } else {
+      selectAllTasks(sortedTasks.map(t => t.id));
+    }
+  }, [sortedTasks, isAllSelected, selectAllTasks, clearSelection]);
+
+  // Bulk operations
+  const handleBulkStatusChange = useCallback(async (status: TaskStatus) => {
+    await bulkUpdateTasks(selectedTaskIds, { status });
+  }, [selectedTaskIds, bulkUpdateTasks]);
+
+  const handleBulkPriorityChange = useCallback(async (priority: TaskPriority) => {
+    await bulkUpdateTasks(selectedTaskIds, { priority });
+  }, [selectedTaskIds, bulkUpdateTasks]);
+
+  const handleBulkAssigneeChange = useCallback(async (assigneeId: number | null) => {
+    await bulkUpdateTasks(selectedTaskIds, { assignee_id: assigneeId });
+  }, [selectedTaskIds, bulkUpdateTasks]);
+
+  const handleBulkDelete = useCallback(async () => {
+    await bulkDeleteTasks(Array.from(selectedTaskIds));
+  }, [selectedTaskIds, bulkDeleteTasks]);
+
   // Loading state
   if (loading) {
     return (
@@ -197,8 +239,10 @@ export function ListView() {
     );
   }
 
+  const selectedCount = selectedTaskIds.size;
+
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col pb-16">
       {/* Filter Bar */}
       <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
         <FilterBar
@@ -241,6 +285,32 @@ export function ListView() {
               <table className="w-full min-w-[640px]" role="grid">
                 <thead>
                   <tr>
+                    {/* Select All Checkbox */}
+                    <th
+                      className="sticky top-0 z-10 px-2 py-3 text-left bg-gray-50 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700 w-10"
+                      scope="col"
+                    >
+                      <div
+                        className={clsx(
+                          'w-5 h-5 rounded border-2 flex items-center justify-center cursor-pointer transition-colors',
+                          isAllSelected(sortedTasks.map(t => t.id))
+                            ? 'bg-blue-600 border-blue-600'
+                            : isPartialSelected(sortedTasks.map(t => t.id))
+                            ? 'bg-blue-600 border-blue-600'
+                            : 'border-gray-300 dark:border-gray-600 hover:border-blue-400'
+                        )}
+                        onClick={handleSelectAll}
+                        role="checkbox"
+                        aria-checked={isAllSelected(sortedTasks.map(t => t.id))}
+                        aria-label="Select all tasks"
+                      >
+                        {isAllSelected(sortedTasks.map(t => t.id)) ? (
+                          <Check className="w-3 h-3 text-white" aria-hidden="true" />
+                        ) : isPartialSelected(sortedTasks.map(t => t.id)) ? (
+                          <Check className="w-3 h-3 text-white" aria-hidden="true" />
+                        ) : null}
+                      </div>
+                    </th>
                     <SortHeader
                       label="Title"
                       sortKey="title"
@@ -307,6 +377,8 @@ export function ListView() {
                       onEdit={handleEditTask}
                       onDelete={handleDeleteTask}
                       isOverdue={isTaskOverdue(task)}
+                      isSelected={isTaskSelected(task.id)}
+                      onToggleSelection={toggleTaskSelection}
                     />
                   ))}
                 </tbody>
@@ -359,6 +431,18 @@ export function ListView() {
         variant="danger"
         isLoading={isSubmitting}
       />
+
+      {/* Bulk Action Bar */}
+      {selectedCount > 0 && (
+        <BulkActionBar
+          selectedCount={selectedCount}
+          onStatusChange={handleBulkStatusChange}
+          onPriorityChange={handleBulkPriorityChange}
+          onAssigneeChange={handleBulkAssigneeChange}
+          onDelete={handleBulkDelete}
+          onClearSelection={clearSelection}
+        />
+      )}
     </div>
   );
 }

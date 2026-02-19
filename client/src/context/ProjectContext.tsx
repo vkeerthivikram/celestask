@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { Project, CreateProjectDTO, UpdateProjectDTO, TreeNode, ProjectAssignee, ProjectAssigneeRole, CreateProjectAssigneeDTO } from '../types';
 import * as api from '../services/api';
+import { useToast } from './ToastContext';
+
+export * from './ToastContext';
 
 interface ProjectContextType {
   // State
@@ -46,6 +49,7 @@ export function ProjectProvider({ children, currentProjectId }: ProjectProviderP
   const [currentProjectAssignees, setCurrentProjectAssignees] = useState<ProjectAssignee[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   
   // Fetch all projects
   const fetchProjects = useCallback(async () => {
@@ -100,15 +104,17 @@ export function ProjectProvider({ children, currentProjectId }: ProjectProviderP
     try {
       const newProject = await api.createProject(data);
       setProjects(prev => [...prev, newProject]);
+      toast.success('Project created', `"${newProject.name}" has been created successfully.`);
       return newProject;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create project';
       setError(errorMessage);
+      toast.error('Failed to create project', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
   
   // Update an existing project
   const updateProject = useCallback(async (id: number, data: UpdateProjectDTO): Promise<Project> => {
@@ -126,18 +132,21 @@ export function ProjectProvider({ children, currentProjectId }: ProjectProviderP
         setCurrentProject(updatedProject);
       }
       
+      toast.success('Project updated', `"${updatedProject.name}" has been updated.`);
       return updatedProject;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update project';
       setError(errorMessage);
+      toast.error('Failed to update project', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [currentProject]);
+  }, [currentProject, toast]);
   
   // Delete a project
   const deleteProject = useCallback(async (id: number): Promise<void> => {
+    const projectToDelete = projects.find(p => p.id === id);
     setLoading(true);
     setError(null);
     
@@ -150,14 +159,17 @@ export function ProjectProvider({ children, currentProjectId }: ProjectProviderP
         const remainingProjects = projects.filter(p => p.id !== id);
         setCurrentProject(remainingProjects.length > 0 ? remainingProjects[0] : null);
       }
+      
+      toast.success('Project deleted', projectToDelete ? `"${projectToDelete.name}" has been deleted.` : 'Project has been deleted.');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete project';
       setError(errorMessage);
+      toast.error('Failed to delete project', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [currentProject, projects]);
+  }, [currentProject, projects, toast]);
   
   // Clear error
   const clearError = useCallback(() => {
@@ -223,15 +235,17 @@ export function ProjectProvider({ children, currentProjectId }: ProjectProviderP
     try {
       const newProject = await api.createSubProject(parentId, data);
       setProjects(prev => [...prev, newProject]);
+      toast.success('Sub-project created', `"${newProject.name}" has been created as a sub-project.`);
       return newProject;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create subproject';
       setError(errorMessage);
+      toast.error('Failed to create sub-project', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
   
   // Move a project to a new parent
   const moveProject = useCallback(async (id: number, parentId: number | null): Promise<Project> => {
@@ -249,15 +263,17 @@ export function ProjectProvider({ children, currentProjectId }: ProjectProviderP
         setCurrentProject(updatedProject);
       }
       
+      toast.success('Project moved', parentId ? 'Project moved to new parent.' : 'Project moved to root level.');
       return updatedProject;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to move project';
       setError(errorMessage);
+      toast.error('Failed to move project', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [currentProject]);
+  }, [currentProject, toast]);
   
   // Set project owner
   const setProjectOwner = useCallback(async (projectId: number, personId: number | null): Promise<Project> => {
@@ -275,15 +291,17 @@ export function ProjectProvider({ children, currentProjectId }: ProjectProviderP
         setCurrentProject(updatedProject);
       }
       
+      toast.success('Owner updated', personId ? 'Project owner has been set.' : 'Project owner has been removed.');
       return updatedProject;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to set project owner';
       setError(errorMessage);
+      toast.error('Failed to set owner', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [currentProject]);
+  }, [currentProject, toast]);
   
   // Fetch project assignees
   const fetchProjectAssignees = useCallback(async (projectId: number): Promise<ProjectAssignee[]> => {
@@ -315,15 +333,17 @@ export function ProjectProvider({ children, currentProjectId }: ProjectProviderP
       if (currentProject?.id === projectId) {
         setCurrentProjectAssignees(prev => [...prev, newAssignee]);
       }
+      toast.success('Assignee added', 'Team member has been added to the project.');
       return newAssignee;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to add project assignee';
       setError(errorMessage);
+      toast.error('Failed to add assignee', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [currentProject]);
+  }, [currentProject, toast]);
   
   // Remove project assignee
   const removeProjectAssignee = useCallback(async (projectId: number, assigneeId: number): Promise<void> => {
@@ -335,14 +355,16 @@ export function ProjectProvider({ children, currentProjectId }: ProjectProviderP
       if (currentProject?.id === projectId) {
         setCurrentProjectAssignees(prev => prev.filter(a => a.id !== assigneeId));
       }
+      toast.success('Assignee removed', 'Team member has been removed from the project.');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to remove project assignee';
       setError(errorMessage);
+      toast.error('Failed to remove assignee', errorMessage);
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [currentProject]);
+  }, [currentProject, toast]);
   
   // Fetch projects on mount
   useEffect(() => {
@@ -393,6 +415,50 @@ export function useProjects(): ProjectContextType {
     throw new Error('useProjects must be used within a ProjectProvider');
   }
   return context;
+}
+
+/**
+ * Helper function to get all ancestors of a project by traversing parent_project_id
+ * Returns array from root to the immediate parent (excluding the project itself)
+ */
+export function getProjectAncestors(projects: Project[], projectId: string | number): Project[] {
+  const ancestors: Project[] = [];
+  const projectMap = new Map(projects.map(p => [String(p.id), p]));
+  
+  let currentProject = projectMap.get(String(projectId));
+  
+  while (currentProject && currentProject.parent_project_id) {
+    const parent = projectMap.get(String(currentProject.parent_project_id));
+    if (parent) {
+      ancestors.unshift(parent);
+      currentProject = parent;
+    } else {
+      break;
+    }
+  }
+  
+  return ancestors;
+}
+
+/**
+ * Helper hook to get selected project ID and selection function
+ * This provides a compatibility layer for components expecting `selectedProject` string
+ */
+export function useProjectSelection() {
+  const { currentProject, setCurrentProjectById, projects } = useProjects();
+  
+  const selectedProject = currentProject ? String(currentProject.id) : null;
+  
+  const selectProject = useCallback((projectId: string | null) => {
+    setCurrentProjectById(projectId ? parseInt(projectId, 10) : null);
+  }, [setCurrentProjectById]);
+  
+  return {
+    selectedProject,
+    selectProject,
+    currentProject,
+    projects,
+  };
 }
 
 export default ProjectContext;

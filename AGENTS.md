@@ -27,7 +27,7 @@
 - **Inspiration**: Similar to Jira but simplified for personal use
 - **Architecture**: Full-stack with Express backend and React frontend
 - **Database**: SQLite for local-first data storage
-- **Version**: v1.3.0
+- **Version**: v1.6.0
 
 ### Key Features
 
@@ -39,6 +39,8 @@
 - **Progress Tracking**: Completion percentage and time estimates (v1.2.0)
 - **Notes System**: Markdown notes attached to any entity (v1.2.0)
 - **Project Assignments**: Project owner and team members with roles (v1.3.0)
+- **Custom Fields**: User-defined fields on tasks with 7 types (v1.6.0)
+- **Saved Views**: Save and recall filter configurations per view (v1.6.0)
 - **Multiple Views**: 6 views (Dashboard, Kanban, List, Calendar, Timeline, People)
 
 ### AI Collaboration Model
@@ -48,6 +50,157 @@ The project was orchestrated through **Orchestrator Mode**, which coordinated mu
 ---
 
 ## Feature Updates
+
+### v1.6.0 - Custom Fields & Saved Views (2026-02-19)
+
+This update adds user-defined custom fields for tasks and the ability to save filter configurations as views.
+
+#### New Features
+
+| Feature | Description |
+|---------|-------------|
+| **Custom Fields** | Define custom fields for tasks with 7 types: text, number, date, select, multiselect, checkbox, url |
+| **Custom Field Values** | Store and manage custom field values per task |
+| **Saved Views** | Save filter configurations with name and default option |
+| **Filter Recall** | Quickly apply saved filters from dropdown |
+
+#### Files Added
+
+| File | Purpose |
+|------|---------|
+| [`server/routes/customFields.js`](server/routes/customFields.js) | Custom fields CRUD API endpoints |
+| [`server/routes/savedViews.js`](server/routes/savedViews.js) | Saved views CRUD API endpoints |
+| [`client/src/context/CustomFieldContext.tsx`](client/src/context/CustomFieldContext.tsx) | Custom fields state management |
+| [`client/src/context/SavedViewContext.tsx`](client/src/context/SavedViewContext.tsx) | Saved views state management |
+| [`client/src/components/common/CustomFieldForm.tsx`](client/src/components/common/CustomFieldForm.tsx) | Custom field definition form |
+| [`client/src/components/common/CustomFieldInput.tsx`](client/src/components/common/CustomFieldInput.tsx) | Dynamic input renderer by field type |
+| [`client/src/components/common/SaveViewModal.tsx`](client/src/components/common/SaveViewModal.tsx) | Save filter as view modal |
+| [`client/src/components/common/SavedViewsDropdown.tsx`](client/src/components/common/SavedViewsDropdown.tsx) | Saved views selection dropdown |
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| [`server/db/schema.js`](server/db/schema.js) | Added custom_fields, custom_field_values, saved_views tables |
+| [`server/routes/tasks.js`](server/routes/tasks.js) | Added custom field value endpoints |
+| [`server/index.js`](server/index.js) | Registered customFields and savedViews routers |
+| [`client/src/types/index.ts`](client/src/types/index.ts) | Added CustomField, CustomFieldValue, SavedView types |
+| [`client/src/services/api.ts`](client/src/services/api.ts) | Added customFields and savedViews API client methods |
+| [`client/src/App.tsx`](client/src/App.tsx) | Added CustomFieldProvider and SavedViewProvider |
+| [`client/src/components/common/TaskForm.tsx`](client/src/components/common/TaskForm.tsx) | Integrated custom fields section |
+| [`client/src/components/list/FilterBar.tsx`](client/src/components/list/FilterBar.tsx) | Added Save View button and SavedViewsDropdown |
+
+#### Database Changes
+
+```sql
+-- Custom field definitions
+CREATE TABLE custom_fields (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    field_type TEXT NOT NULL CHECK (field_type IN ('text', 'number', 'date', 'select', 'multiselect', 'checkbox', 'url')),
+    project_id TEXT,
+    options TEXT,
+    required INTEGER DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Custom field values
+CREATE TABLE custom_field_values (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    custom_field_id TEXT NOT NULL,
+    value TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(task_id, custom_field_id)
+);
+
+-- Saved views
+CREATE TABLE saved_views (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    view_type TEXT NOT NULL CHECK (view_type IN ('list', 'kanban', 'calendar', 'timeline')),
+    project_id TEXT,
+    filters TEXT NOT NULL,
+    sort_by TEXT,
+    sort_order TEXT DEFAULT 'asc',
+    is_default INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### API Endpoints Added
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/custom-fields` | GET | List custom fields |
+| `/api/custom-fields` | POST | Create custom field |
+| `/api/custom-fields/:id` | PUT | Update custom field |
+| `/api/custom-fields/:id` | DELETE | Delete custom field |
+| `/api/tasks/:id/custom-fields` | GET | Get task's custom field values |
+| `/api/tasks/:id/custom-fields/:fieldId` | PUT | Set custom field value |
+| `/api/tasks/:id/custom-fields/:fieldId` | DELETE | Remove custom field value |
+| `/api/saved-views` | GET | List saved views |
+| `/api/saved-views` | POST | Create saved view |
+| `/api/saved-views/:id` | PUT | Update saved view |
+| `/api/saved-views/:id` | DELETE | Delete saved view |
+| `/api/saved-views/:id/set-default` | PUT | Set as default view |
+
+#### TypeScript Types Added
+
+```typescript
+export type CustomFieldType = 'text' | 'number' | 'date' | 'select' | 'multiselect' | 'checkbox' | 'url';
+
+export interface CustomField {
+  id: string;
+  name: string;
+  field_type: CustomFieldType;
+  project_id?: string | null;
+  options?: string[] | null;
+  required: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomFieldValue {
+  id: string;
+  task_id: string;
+  custom_field_id: string;
+  value: string | null;
+  custom_field?: CustomField;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ViewType = 'list' | 'kanban' | 'calendar' | 'timeline';
+
+export interface SavedView {
+  id: string;
+  name: string;
+  view_type: ViewType;
+  project_id?: string | null;
+  filters: Record<string, unknown>;
+  sort_by?: string | null;
+  sort_order: 'asc' | 'desc';
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+```
+
+#### Agents Used for v1.6.0
+
+| Mode | Task | Files Created/Modified |
+|------|------|------------------------|
+| **Code** | Backend Implementation | [`server/db/schema.js`](server/db/schema.js), [`server/routes/customFields.js`](server/routes/customFields.js), [`server/routes/savedViews.js`](server/routes/savedViews.js), [`server/routes/tasks.js`](server/routes/tasks.js), [`server/index.js`](server/index.js) |
+| **Frontend Specialist** | Frontend Implementation | [`client/src/types/index.ts`](client/src/types/index.ts), [`client/src/services/api.ts`](client/src/services/api.ts), [`client/src/App.tsx`](client/src/App.tsx), [`client/src/context/CustomFieldContext.tsx`](client/src/context/CustomFieldContext.tsx), [`client/src/context/SavedViewContext.tsx`](client/src/context/SavedViewContext.tsx), [`client/src/components/common/CustomFieldForm.tsx`](client/src/components/common/CustomFieldForm.tsx), [`client/src/components/common/CustomFieldInput.tsx`](client/src/components/common/CustomFieldInput.tsx), [`client/src/components/common/TaskForm.tsx`](client/src/components/common/TaskForm.tsx), [`client/src/components/common/SaveViewModal.tsx`](client/src/components/common/SaveViewModal.tsx), [`client/src/components/common/SavedViewsDropdown.tsx`](client/src/components/common/SavedViewsDropdown.tsx), [`client/src/components/list/FilterBar.tsx`](client/src/components/list/FilterBar.tsx) |
+| **Documentation Specialist** | Documentation Update | [`README.md`](README.md), [`AGENTS.md`](AGENTS.md) |
+
+---
 
 ### v1.3.0 - Project Assignments (2026-02-18)
 
@@ -737,101 +890,3 @@ interface TaskContextType {
    - Column descriptions
 
 7. **Project Structure**
-
----
-
-### 6 |                  Verify.notNull(entityId, "Entity id must not be null.");
-                  val orchestrator = orchestrator as? HierarchyViewOrchestrator<T> ? T.instanceType,
-       .FindByIdOrException
-            });
-        }
-
-        val templateIndependentRequest = buildTemplateIndependentRequest(
-            loadParts = loadParts,
-            userId = userId,
-            assigned = assigned,
-            includeFullMonth = includeFullMonth,
-            displayEmptyWDays = displayEmptyWDays,
-            useWeekHeaders = useWeekHeaders
-        )
-        when ((entityId: EntityId?)?.instanceType) {
-            InstanceType.UNDEFINED -> {}
-            InstanceType.PROJECT -> templateIndependentRequest.childMenuFilterProvider = CalendarMenuFilterProvider.RelatedToProject(userId, entityId, taskTypeProvider)
-            InstanceType.TASK -> templateIndependentRequest.childMenuFilterProvider = CalendarMenuFilterProvider.RelatedToTask(userId, entityId, taskTypeProvider)
-            else -> throw IllegalArgumentException("entityId must be of instance type PROJECT or TASK")
-        }
-        return api.compileViewMenuItems(templateIndependentRequest)
-    }
-
-    override fun getListToViewMappings()])
-        .single { (v as? GanttView)?.taskTypeProvider == taskTypeProvider }!!
-
-    private fun buildTemplateIndependentRequest(
-        loadParts: List<LoadPart>,
-        userId: UserId,
-        assigned: Set<TaskTreeNode>,
-        includeFullMonth: Boolean,
-        displayEmptyWDays: Boolean,
-        useWeekHeaders: Boolean
-    ) = ListToViewMappingRequest(
-        userId,
-        loadParts,
-        GanttMenuProvider.TemplateIndependent(
-            TaskOrchestrator.saveParts(taskTypeProvider, assigned),
-            maxMonthDays = impl.getMaxMonthDays().toInt(),
-            includeFullMonth,
-            displayEmptyWDays,
-            useWeekHeaders,
-            scrollModeProvider,
-            CustomMenuItemProvider,
-            taskIdTypeProvider = taskTypeProvider,
-            timelineTypeProvider = timelineTypeProvider,
-            bridge = Bridge
-        )
-    )
-}
-
-@DslMarker
-annotation class CalendarMenuDsl
-
-fun CalendarMenuForm(
-    user: User,
-    project: Project,
-    assigned: Set<TaskTreeNode>,
-    builder: CalendarMenuForm.() -> Unit
-) = CalendarMenuForm(user = user).let { form -> CalendarMenuFormImpl(form).apply(builder).form }
-
-class CalendarMenuFormImpl(form: CalendarMenuForm, viewFactory: Api.CalendarMenuViewFactory.Available) {
-    val form = form
-    val bridge = viewFactory
-    var CalendarMenuForm.loadedData by Delegates.notNull<CalendarMenuForm.LoadedData>()
-        private set
-    val CustomMenuItemProvider: CalendarMenuForm.CustomMenuItemProvider by Delegates.notNull<CalendarMenuForm.CustomMenuItemProvider>()
-        private set
-    val MenuItemProvider: CalendarMenuItemProvider by Delegates.notNull<CalendarMenuItemProvider>()
-        private set
-    val DatePickerProvider: DatePicker by Delegates.notNull<DatePickerProvider>()
-        private set
-    val HeaderTitleProvider: HeaderTitleProvider by Delegates.notNull<HeaderTitleProvider>()
-        private set
-    val ScrollingProvider: ScrollingProvider by Delegates.notNull<ScrollingProvider>()
-        private set
-    val MenuProvider: MenuProvider by Delegates.notNull<MenuProvider>()
-        private set
-    val NotificationsProvider: NotificationProvider by Delegates.notNull<NotificationProvider>()
-        private set
-    val ReportsProvider: ReportsProvider by Delegates.notNull<ReportsProvider>()
-        private set
-    val Theme by Delegates.notNull<Theme>()
-        private set
-
-    fun loadedData(data: CalendarMenuForm.LoadedData) = apply { this.loadedData = data }
-    fun theme(theme: Theme) = apply { this.Theme = theme }
-    fun customMenuItem(customMenuItem: CalendarMenuForm.CustomMenuItemProvider) = apply { this.CustomMenuItemProvider = customMenuItem }
-    fun menuItem(menuItem: CalendarMenuItemProvider) = apply { this.MenuItemProvider = menuItem }
-    fun scrolling(scrolling: ScrollingProvider) = apply { this.ScrollingProvider = scrolling }
-    fun date(datePicker: DatePicker) = apply { this.DatePickerProvider = datePicker }
-    fun title(headerTitle: HeaderTitleProvider) = apply { this.HeaderTitleProvider = headerTitle }
-    fun notifications(notifications: NotificationProvider) = apply { this.NotificationsProvider = notifications }
-    fun reports(reports: ReportsProvider) = apply { this.ReportsProvider = reports }
-}

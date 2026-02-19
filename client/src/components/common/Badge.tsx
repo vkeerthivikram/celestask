@@ -1,6 +1,12 @@
-import React, { forwardRef, type HTMLAttributes, type ReactNode } from 'react';
+import React, { forwardRef, type HTMLAttributes, type ReactNode, useState } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import {
+  AlertTriangle,
+  ArrowUp,
+  Minus,
+  ArrowDown,
+} from 'lucide-react';
 import type { TaskStatus, TaskPriority, Tag } from '../../types';
 
 type BadgeVariant = 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info';
@@ -131,10 +137,12 @@ export const StatusBadge = forwardRef<HTMLSpanElement, StatusBadgeProps>(
 
 StatusBadge.displayName = 'StatusBadge';
 
-// Priority Badge Component
+// Priority Badge Component with accessibility improvements
 interface PriorityBadgeProps extends Omit<BadgeProps, 'variant' | 'children'> {
   priority: TaskPriority;
   children?: ReactNode;
+  showIcon?: boolean;
+  showLabel?: boolean;
 }
 
 const priorityVariants: Record<TaskPriority, BadgeVariant> = {
@@ -151,12 +159,100 @@ const priorityLabels: Record<TaskPriority, string> = {
   urgent: 'Urgent',
 };
 
+// Priority icon configuration with WCAG-compliant colors
+const priorityIconConfig: Record<TaskPriority, {
+  icon: React.ComponentType<{ className?: string }>;
+  colorClass: string;
+  pattern: string;
+}> = {
+  urgent: {
+    icon: AlertTriangle,
+    colorClass: 'text-red-600 dark:text-red-400',
+    pattern: 'Solid background',
+  },
+  high: {
+    icon: ArrowUp,
+    colorClass: 'text-orange-600 dark:text-orange-400',
+    pattern: 'Diagonal lines',
+  },
+  medium: {
+    icon: Minus,
+    colorClass: 'text-blue-600 dark:text-blue-400',
+    pattern: 'Dotted',
+  },
+  low: {
+    icon: ArrowDown,
+    colorClass: 'text-gray-600 dark:text-gray-400',
+    pattern: 'Striped',
+  },
+};
+
 export const PriorityBadge = forwardRef<HTMLSpanElement, PriorityBadgeProps>(
-  ({ priority, children, ...props }, ref) => {
+  ({ priority, children, showIcon = true, showLabel = true, className, ...props }, ref) => {
+    const [showTooltip, setShowTooltip] = useState(false);
+    const config = priorityIconConfig[priority];
+    const IconComponent = config.icon;
+    const label = children || priorityLabels[priority];
+    
     return (
-      <Badge ref={ref} variant={priorityVariants[priority]} dot {...props}>
-        {children || priorityLabels[priority]}
-      </Badge>
+      <span
+        ref={ref}
+        className={twMerge(
+          clsx(
+            'inline-flex items-center font-medium rounded-full',
+            variantStyles[priorityVariants[priority]],
+            sizeStyles['sm'],
+            'relative',
+            className
+          )
+        )}
+        role="img"
+        aria-label={`Priority: ${priorityLabels[priority]}`}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+        onFocus={() => setShowTooltip(true)}
+        onBlur={() => setShowTooltip(false)}
+        {...props}
+      >
+        {showIcon && (
+          <IconComponent
+            className={twMerge(clsx('w-3 h-3 mr-1', config.colorClass))}
+            aria-hidden="true"
+          />
+        )}
+        {showLabel && (
+          <span>{label}</span>
+        )}
+        
+        {/* Tooltip for screen readers and hover */}
+        {showTooltip && (
+          <span
+            role="tooltip"
+            className={twMerge(
+              clsx(
+                'absolute bottom-full left-1/2 -translate-x-1/2 mb-2',
+                'px-2 py-1 text-xs whitespace-nowrap',
+                'bg-gray-900 dark:bg-gray-700 text-white',
+                'rounded-md shadow-lg',
+                'z-50',
+                'animate-fade-in'
+              )
+            )}
+          >
+            {priorityLabels[priority]} Priority
+            <span
+              className={twMerge(
+                clsx(
+                  'absolute top-full left-1/2 -translate-x-1/2',
+                  'border-4 border-transparent',
+                  'border-t-gray-900 dark:border-t-gray-700'
+                )
+              )}
+              aria-hidden="true"
+            />
+          </span>
+        )}
+      </span>
     );
   }
 );

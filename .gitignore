@@ -8,3 +8,10 @@ _bmad-output/
 .opencode/
 .kilocode/
 .kilocodemodes
+
+# Database files (SQLite)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+server/data/*.db

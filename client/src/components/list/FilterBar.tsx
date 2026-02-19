@@ -1,9 +1,12 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Search, X, Filter, ChevronDown, User, Tag } from 'lucide-react';
-import type { TaskStatus, TaskPriority, Person, Tag as TagType } from '../../types';
+import { Search, X, Filter, ChevronDown, User, Tag, Bookmark, Save } from 'lucide-react';
+import type { TaskStatus, TaskPriority, Person, Tag as TagType, SavedView, CreateSavedViewDTO, TaskFilters } from '../../types';
 import { STATUS_CONFIG, PRIORITY_CONFIG } from '../../types';
+import { useSavedViews } from '../../context/SavedViewContext';
+import SaveViewModal from '../common/SaveViewModal';
+import SavedViewsDropdown from '../common/SavedViewsDropdown';
 
 export interface ListFilters {
   search: string;
@@ -13,6 +16,30 @@ export interface ListFilters {
   tag_id: string;
 }
 
+// Helper to convert ListFilters to TaskFilters for saved views
+function listFiltersToTaskFilters(filters: ListFilters): TaskFilters {
+  return {
+    search: filters.search || undefined,
+    // Note: TaskFilters uses single status, ListFilters uses array
+    // We store the first selected status or undefined
+    status: filters.status.length > 0 ? filters.status[0] : undefined,
+    priority: filters.priority.length > 0 ? filters.priority[0] : undefined,
+    assignee_id: filters.assignee_id ? Number(filters.assignee_id) : undefined,
+    tag_id: filters.tag_id ? Number(filters.tag_id) : undefined,
+  };
+}
+
+// Helper to convert TaskFilters back to ListFilters
+function taskFiltersToListFilters(filters: TaskFilters): ListFilters {
+  return {
+    search: filters.search || '',
+    status: filters.status ? [filters.status] : [],
+    priority: filters.priority ? [filters.priority] : [],
+    assignee_id: filters.assignee_id ? String(filters.assignee_id) : '',
+    tag_id: filters.tag_id ? String(filters.tag_id) : '',
+  };
+}
+
 interface FilterBarProps {
   filters: ListFilters;
   onFilterChange: (filters: ListFilters) => void;
@@ -20,6 +47,10 @@ interface FilterBarProps {
   filteredCount: number;
   people?: Person[];
   tags?: TagType[];
+  projectId?: string | null;
+  viewType?: 'list' | 'kanban' | 'calendar' | 'timeline';
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 // Custom debounce hook
@@ -324,9 +355,27 @@ export function FilterBar({
   filteredCount,
   people = [],
   tags = [],
+  projectId,
+  viewType = 'list',
+  sortBy,
+  sortOrder = 'asc',
 }: FilterBarProps) {
   const [searchInput, setSearchInput] = useState(filters.search);
+  const [showSaveModal, setShowSaveModal] = useState(false);
   const debouncedSearch = useDebounce(searchInput, 300);
+  
+  const { 
+    savedViews, 
+    fetchSavedViews, 
+    createSavedView, 
+    deleteSavedView,
+    setDefaultView,
+  } = useSavedViews();
+  
+  // Fetch saved views when project or view type changes
+  useEffect(() => {
+    fetchSavedViews(projectId ?? undefined, viewType);
+  }, [projectId, viewType, fetchSavedViews]);
 
   // Update parent when debounced search changes
   useEffect(() => {
@@ -377,6 +426,24 @@ export function FilterBar({
       tag_id: '',
     });
   };
+  
+  const handleSelectSavedView = (view: SavedView) => {
+    const listFilters = taskFiltersToListFilters(view.filters);
+    setSearchInput(listFilters.search);
+    onFilterChange(listFilters);
+  };
+  
+  const handleDeleteSavedView = async (view: SavedView) => {
+    await deleteSavedView(view.id);
+  };
+  
+  const handleSetDefaultView = async (view: SavedView) => {
+    await setDefaultView(view.id);
+  };
+  
+  const handleSaveView = async (data: CreateSavedViewDTO): Promise<SavedView> => {
+    return await createSavedView(data);
+  };
 
   const hasActiveFilters =
     filters.search || 
@@ -405,14 +472,14 @@ export function FilterBar({
   }));
 
   const assigneeOptions = people.map(person => ({
-    value: person.id,
+    value: String(person.id),
     label: person.name,
     color: '#3B82F6',
     subtitle: person.designation,
   }));
 
   const tagOptions = tags.map(tag => ({
-    value: tag.id,
+    value: String(tag.id),
     label: tag.name,
     color: tag.color,
   }));
@@ -458,6 +525,16 @@ export function FilterBar({
 
         {/* Filter Dropdowns */}
         <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+          {/* Saved Views Dropdown */}
+          {savedViews.length > 0 && (
+            <SavedViewsDropdown
+              views={savedViews}
+              onSelect={handleSelectSavedView}
+              onDelete={handleDeleteSavedView}
+              onSetDefault={handleSetDefaultView}
+            />
+          )}
+          
           <MultiSelectDropdown
             label="Status"
             options={statusOptions}
@@ -486,6 +563,30 @@ export function FilterBar({
             onChange={handleTagChange}
             placeholder="Any tag"
           />
+
+          {/* Save View Button */}
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={() => setShowSaveModal(true)}
+              className={twMerge(
+                clsx(
+                  'inline-flex items-center gap-1.5 px-3 py-2',
+                  'text-sm font-medium rounded-md',
+                  'border border-gray-300 dark:border-gray-600',
+                  'bg-white dark:bg-gray-800',
+                  'text-gray-600 dark:text-gray-400',
+                  'hover:bg-gray-50 dark:hover:bg-gray-700',
+                  'hover:text-gray-900 dark:hover:text-gray-200',
+                  'transition-colors duration-150'
+                )
+              )}
+              aria-label="Save current view"
+            >
+              <Bookmark className="w-4 h-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Save View</span>
+            </button>
+          )}
 
           {/* Clear Filters Button */}
           {hasActiveFilters && (
@@ -525,6 +626,20 @@ export function FilterBar({
           </div>
         )}
       </div>
+      
+      {/* Save View Modal */}
+      {showSaveModal && (
+        <SaveViewModal
+          isOpen={showSaveModal}
+          onClose={() => setShowSaveModal(false)}
+          onSave={handleSaveView}
+          currentFilters={listFiltersToTaskFilters(filters)}
+          currentSortBy={sortBy}
+          currentSortOrder={sortOrder}
+          viewType={viewType}
+          projectId={projectId}
+        />
+      )}
     </div>
   );
 }

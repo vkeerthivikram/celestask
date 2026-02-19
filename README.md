@@ -1,7 +1,7 @@
 # 📋 TaskFlow - Project Management Application
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com)
-[![Version](https://img.shields.io/badge/version-1.3.0-blue)](https://github.com)
+[![Version](https://img.shields.io/badge/version-1.6.0-blue)](https://github.com)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 
@@ -64,6 +64,15 @@ A **local-first, single-user** project management web application inspired by Ji
 - **Project Assignees** - Add multiple team members to projects with roles (lead, member, observer)
 - **Owner Display** - Visual indicators show project owner in sidebar and project tree
 - **Team Management** - View and manage project team membership
+
+### 🔧 v1.6.0: Custom Fields & Saved Views
+- **Custom Fields** - Define custom fields for tasks with 7 types: text, number, date, select, multiselect, checkbox, url
+- **Project-Specific Fields** - Create fields that apply globally or to specific projects
+- **Field Options** - Configure select and multiselect fields with predefined options
+- **Required Fields** - Mark custom fields as required for task completion
+- **Saved Views** - Save current filter configurations as named views
+- **Default Views** - Set a saved view as the default for any view type
+- **Quick Access** - Apply saved filters instantly from the dropdown
 
 ### 🏷️ Tags & Categorization
 - **Custom Tags** - Create tags with custom names and colors
@@ -450,6 +459,66 @@ Reinstall-All
    - **Observer**: Read-only access to project progress
 4. Each project can have multiple assignees with different roles
 
+### Creating Custom Fields (v1.6.0)
+1. Navigate to a project or use global custom fields
+2. Click **"Manage Custom Fields"** in the project settings
+3. Click **"+ New Field"** to create a custom field
+4. Configure the field:
+   - **Name**: Field display name (e.g., "Story Points", "Sprint", "Epic Link")
+   - **Type**: Choose from 7 types:
+     - **Text**: Single-line text input
+     - **Number**: Numeric value
+     - **Date**: Date picker
+     - **Select**: Single selection dropdown
+     - **Multi-Select**: Multiple selection dropdown
+     - **Checkbox**: Boolean toggle
+     - **URL**: URL/link field
+   - **Options**: For select/multi-select, define available options
+   - **Required**: Mark as required for task completion
+   - **Project Scope**: Leave empty for global, or select a project
+5. Click **"Create Field"**
+6. Custom fields appear automatically in task forms for applicable projects
+
+### Using Custom Fields in Tasks (v1.6.0)
+1. Open a task for editing
+2. Scroll to the **Custom Fields** section
+3. Fill in values for available custom fields:
+   - Text fields: Type directly
+   - Number fields: Enter numeric values
+   - Date fields: Use the date picker
+   - Select fields: Choose one option
+   - Multi-Select fields: Choose multiple options
+   - Checkbox fields: Toggle on/off
+   - URL fields: Enter complete URLs
+4. Required fields must be filled before task can be marked complete
+5. Click **"Save Changes"** to store custom field values
+
+### Saving Filter Views (v1.6.0)
+1. In List, Kanban, Calendar, or Timeline view, apply your desired filters
+2. Configure:
+   - Status filters
+   - Priority filters
+   - Assignee filters
+   - Tag filters
+   - Date range filters
+   - Sort order
+3. Click the **"Save View"** button in the filter bar
+4. In the save modal:
+   - Enter a **View Name** (e.g., "My High Priority Tasks", "Sprint 1 Items")
+   - Optionally check **"Set as default"** to auto-load this view
+5. Click **"Save"** to store the view configuration
+
+### Applying Saved Views (v1.6.0)
+1. Click the **Views dropdown** in the filter bar
+2. Select a saved view from the list
+3. All filters and sort settings are applied instantly
+4. The default view loads automatically when you open that view type
+5. To manage saved views:
+   - Click the **Views dropdown** 
+   - Hover over a saved view to see edit/delete options
+   - Update view name or set as default
+   - Delete unused views
+
 ### Creating and Using Tags
 1. Tags can be created when editing a task:
    - Click in the **Tags** field
@@ -804,6 +873,142 @@ curl -X POST http://localhost:3001/api/tasks/task-uuid/tags \
   -d '{"tag_id": "tag-uuid"}'
 ```
 
+### Custom Fields API (v1.6.0)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/custom-fields` | Get all custom fields (optional `?project_id=xxx`) |
+| `GET` | `/custom-fields/:id` | Get single custom field |
+| `POST` | `/custom-fields` | Create a new custom field |
+| `PUT` | `/custom-fields/:id` | Update a custom field |
+| `DELETE` | `/custom-fields/:id` | Delete a custom field |
+| `GET` | `/tasks/:id/custom-fields` | Get custom field values for a task |
+| `PUT` | `/tasks/:id/custom-fields/:fieldId` | Set custom field value on a task |
+| `DELETE` | `/tasks/:id/custom-fields/:fieldId` | Remove custom field value from a task |
+
+#### Example: Create Custom Field
+```bash
+curl -X POST http://localhost:3001/api/custom-fields \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Story Points",
+    "field_type": "number",
+    "project_id": "project-uuid",
+    "required": false
+  }'
+```
+
+#### Example: Create Select Field with Options
+```bash
+curl -X POST http://localhost:3001/api/custom-fields \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Priority Level",
+    "field_type": "select",
+    "project_id": "project-uuid",
+    "options": ["Critical", "High", "Medium", "Low"],
+    "required": true
+  }'
+```
+
+#### Example: Set Custom Field Value on Task
+```bash
+curl -X PUT http://localhost:3001/api/tasks/task-uuid/custom-fields/field-uuid \
+  -H "Content-Type: application/json" \
+  -d '{"value": "8"}'
+```
+
+#### Example: Get Task Custom Field Values
+```bash
+curl http://localhost:3001/api/tasks/task-uuid/custom-fields
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "value-uuid",
+      "task_id": "task-uuid",
+      "custom_field_id": "field-uuid",
+      "value": "8",
+      "custom_field": {
+        "id": "field-uuid",
+        "name": "Story Points",
+        "field_type": "number",
+        "required": false
+      },
+      "created_at": "2026-02-19T10:00:00Z",
+      "updated_at": "2026-02-19T10:00:00Z"
+    }
+  ]
+}
+```
+
+### Saved Views API (v1.6.0)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/saved-views` | Get all saved views (optional `?view_type=xxx&project_id=xxx`) |
+| `GET` | `/saved-views/:id` | Get single saved view |
+| `POST` | `/saved-views` | Create a new saved view |
+| `PUT` | `/saved-views/:id` | Update a saved view |
+| `DELETE` | `/saved-views/:id` | Delete a saved view |
+| `PUT` | `/saved-views/:id/set-default` | Set view as default for its type |
+
+#### Example: Create Saved View
+```bash
+curl -X POST http://localhost:3001/api/saved-views \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My High Priority Tasks",
+    "view_type": "list",
+    "project_id": "project-uuid",
+    "filters": {
+      "priority": ["high", "urgent"],
+      "status": ["todo", "in_progress"]
+    },
+    "sort_by": "due_date",
+    "sort_order": "asc",
+    "is_default": false
+  }'
+```
+
+#### Example: Set View as Default
+```bash
+curl -X PUT http://localhost:3001/api/saved-views/view-uuid/set-default
+```
+
+#### Example: Get Saved Views for List View
+```bash
+curl "http://localhost:3001/api/saved-views?view_type=list"
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "view-uuid",
+      "name": "My High Priority Tasks",
+      "view_type": "list",
+      "project_id": "project-uuid",
+      "filters": {
+        "priority": ["high", "urgent"],
+        "status": ["todo", "in_progress"]
+      },
+      "sort_by": "due_date",
+      "sort_order": "asc",
+      "is_default": true,
+      "created_at": "2026-02-19T10:00:00Z",
+      "updated_at": "2026-02-19T10:00:00Z"
+    }
+  ]
+}
+```
+
 ### Response Format
 
 **Success Response:**
@@ -926,6 +1131,43 @@ server/data/taskmanager.db
 | `person_id` | TEXT | Foreign key to people (CASCADE DELETE) |
 | `role` | TEXT | Role: 'lead', 'member', or 'observer' |
 | `created_at` | DATETIME | Creation timestamp |
+
+#### `custom_fields` (v1.6.0)
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT | Primary key (UUID) |
+| `name` | TEXT | Field display name |
+| `field_type` | TEXT | Type: 'text', 'number', 'date', 'select', 'multiselect', 'checkbox', 'url' |
+| `project_id` | TEXT | Foreign key to projects (null = global) |
+| `options` | TEXT | JSON array of options for select/multiselect types |
+| `required` | INTEGER | Whether field is required (0 or 1) |
+| `sort_order` | INTEGER | Display order |
+| `created_at` | DATETIME | Creation timestamp |
+| `updated_at` | DATETIME | Last update timestamp |
+
+#### `custom_field_values` (v1.6.0)
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT | Primary key (UUID) |
+| `task_id` | TEXT | Foreign key to tasks (CASCADE DELETE) |
+| `custom_field_id` | TEXT | Foreign key to custom_fields |
+| `value` | TEXT | Stored value (JSON for multiselect) |
+| `created_at` | DATETIME | Creation timestamp |
+| `updated_at` | DATETIME | Last update timestamp |
+
+#### `saved_views` (v1.6.0)
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT | Primary key (UUID) |
+| `name` | TEXT | View display name |
+| `view_type` | TEXT | Type: 'list', 'kanban', 'calendar', or 'timeline' |
+| `project_id` | TEXT | Foreign key to projects (null = all projects) |
+| `filters` | TEXT | JSON object of filter configuration |
+| `sort_by` | TEXT | Sort column name |
+| `sort_order` | TEXT | 'asc' or 'desc' |
+| `is_default` | INTEGER | Whether this is the default view (0 or 1) |
+| `created_at` | DATETIME | Creation timestamp |
+| `updated_at` | DATETIME | Last update timestamp |
 
 ### Seeded Data
 On first run, the database is automatically seeded with:

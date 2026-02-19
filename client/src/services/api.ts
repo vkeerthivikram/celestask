@@ -25,6 +25,16 @@ import type {
   ProjectAssignee,
   ProjectAssigneeRole,
   CreateProjectAssigneeDTO,
+  BulkUpdateDTO,
+  BulkUpdateResponse,
+  CustomField,
+  CustomFieldValue,
+  CreateCustomFieldDTO,
+  UpdateCustomFieldDTO,
+  SetCustomFieldValueDTO,
+  SavedView,
+  CreateSavedViewDTO,
+  UpdateSavedViewDTO,
 } from '../types';
 
 const API_BASE_URL = '/api';
@@ -499,6 +509,153 @@ export async function getTaskProgressRollup(id: number): Promise<TaskProgressRol
   return handleResponse<TaskProgressRollup>(response);
 }
 
+// ============ Bulk Operations API ============
+
+export async function bulkUpdateTasks(data: BulkUpdateDTO): Promise<BulkUpdateResponse> {
+  const response = await fetch(`${API_BASE_URL}/tasks/bulk`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<BulkUpdateResponse>(response);
+}
+
+export async function bulkDeleteTasks(taskIds: number[]): Promise<{ deleted: number }> {
+  const response = await fetch(`${API_BASE_URL}/tasks/bulk`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ taskIds }),
+  });
+  return handleResponse<{ deleted: number }>(response);
+}
+
+// ============ Custom Fields API ============
+
+export async function getCustomFields(projectId?: string): Promise<CustomField[]> {
+  const queryString = projectId ? `?project_id=${projectId}` : '';
+  const response = await fetch(`${API_BASE_URL}/custom-fields${queryString}`);
+  return handleResponse<CustomField[]>(response);
+}
+
+export async function getCustomField(id: string): Promise<CustomField> {
+  const response = await fetch(`${API_BASE_URL}/custom-fields/${id}`);
+  return handleResponse<CustomField>(response);
+}
+
+export async function createCustomField(data: CreateCustomFieldDTO): Promise<CustomField> {
+  const response = await fetch(`${API_BASE_URL}/custom-fields`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<CustomField>(response);
+}
+
+export async function updateCustomField(id: string, data: Partial<UpdateCustomFieldDTO>): Promise<CustomField> {
+  const response = await fetch(`${API_BASE_URL}/custom-fields/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<CustomField>(response);
+}
+
+export async function deleteCustomField(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/custom-fields/${id}`, {
+    method: 'DELETE',
+  });
+  await handleResponse<{ message: string }>(response);
+}
+
+// Custom Field Values API
+export async function getTaskCustomFields(taskId: number): Promise<CustomFieldValue[]> {
+  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/custom-fields`);
+  return handleResponse<CustomFieldValue[]>(response);
+}
+
+export async function setTaskCustomField(
+  taskId: number,
+  fieldId: string,
+  value: SetCustomFieldValueDTO['value']
+): Promise<CustomFieldValue> {
+  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/custom-fields/${fieldId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ value }),
+  });
+  return handleResponse<CustomFieldValue>(response);
+}
+
+export async function deleteTaskCustomField(taskId: number, fieldId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/custom-fields/${fieldId}`, {
+    method: 'DELETE',
+  });
+  await handleResponse<{ message: string }>(response);
+}
+
+// ============ Saved Views API ============
+
+export async function getSavedViews(projectId?: string, viewType?: string): Promise<SavedView[]> {
+  const params = new URLSearchParams();
+  if (projectId) params.append('project_id', projectId);
+  if (viewType) params.append('view_type', viewType);
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  
+  const response = await fetch(`${API_BASE_URL}/saved-views${queryString}`);
+  return handleResponse<SavedView[]>(response);
+}
+
+export async function getSavedView(id: string): Promise<SavedView> {
+  const response = await fetch(`${API_BASE_URL}/saved-views/${id}`);
+  return handleResponse<SavedView>(response);
+}
+
+export async function createSavedView(data: CreateSavedViewDTO): Promise<SavedView> {
+  const response = await fetch(`${API_BASE_URL}/saved-views`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<SavedView>(response);
+}
+
+export async function updateSavedView(id: string, data: Partial<UpdateSavedViewDTO>): Promise<SavedView> {
+  const response = await fetch(`${API_BASE_URL}/saved-views/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<SavedView>(response);
+}
+
+export async function deleteSavedView(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/saved-views/${id}`, {
+    method: 'DELETE',
+  });
+  await handleResponse<{ message: string }>(response);
+}
+
+export async function setDefaultView(id: string): Promise<SavedView> {
+  const response = await fetch(`${API_BASE_URL}/saved-views/${id}/default`, {
+    method: 'PUT',
+  });
+  return handleResponse<SavedView>(response);
+}
+
 // Export all functions as a unified API object
 export const api = {
   projects: {
@@ -541,6 +698,11 @@ export const api = {
     updateProgress: updateTaskProgress,
     getProgressRollup: getTaskProgressRollup,
     getRoot: getRootTasks,
+    bulkUpdate: bulkUpdateTasks,
+    bulkDelete: bulkDeleteTasks,
+    getCustomFields: getTaskCustomFields,
+    setCustomField: setTaskCustomField,
+    deleteCustomField: deleteTaskCustomField,
   },
   people: {
     getAll: getPeople,
@@ -562,6 +724,21 @@ export const api = {
     create: createNote,
     update: updateNote,
     delete: deleteNote,
+  },
+  customFields: {
+    getAll: getCustomFields,
+    getOne: getCustomField,
+    create: createCustomField,
+    update: updateCustomField,
+    delete: deleteCustomField,
+  },
+  savedViews: {
+    getAll: getSavedViews,
+    getOne: getSavedView,
+    create: createSavedView,
+    update: updateSavedView,
+    delete: deleteSavedView,
+    setDefault: setDefaultView,
   },
 };
 

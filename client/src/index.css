@@ -139,6 +139,10 @@
     animation: scaleIn 0.15s ease-out;
   }
   
+  .animate-slide-in-right {
+    animation: slideInRight 0.2s ease-out;
+  }
+  
   @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -174,6 +178,17 @@
     to { 
       opacity: 1;
       transform: scale(1);
+    }
+  }
+  
+  @keyframes slideInRight {
+    from { 
+      opacity: 0;
+      transform: translateX(100%);
+    }
+    to { 
+      opacity: 1;
+      transform: translateX(0);
     }
   }
 }
@@ -235,7 +250,7 @@
 }
 
 .rbc-date-cell.rbc-off-range {
-  @apply text-gray-400 dark:text-gray-600;
+  @apply itext-gray-400 dark:text-gray-600;
 }
 
 .rbc-month-row {

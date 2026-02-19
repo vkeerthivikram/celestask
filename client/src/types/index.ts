@@ -335,3 +335,112 @@ export interface CreateProjectAssigneeDTO {
   person_id: number;
   role: ProjectAssigneeRole;
 }
+
+// Bulk Update DTO for batch task operations
+export interface BulkUpdateDTO {
+  taskIds: number[];
+  updates: {
+    status?: TaskStatus;
+    priority?: TaskPriority;
+    assignee_id?: number | null;
+  };
+}
+
+// Bulk Update Response
+export interface BulkUpdateResponse {
+  updated: number;
+  tasks: Task[];
+}
+
+// ==================== v1.6.0 Custom Fields & Saved Views ====================
+
+// Custom Field Type
+export type CustomFieldType = 'text' | 'number' | 'date' | 'select' | 'multiselect' | 'checkbox' | 'url';
+
+// Custom Field Interface
+export interface CustomField {
+  id: string;
+  name: string;
+  field_type: CustomFieldType;
+  project_id?: string | null;
+  options?: string[];  // For select/multiselect
+  required: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Custom Field Value Interface
+export interface CustomFieldValue {
+  id: string;
+  task_id: string;
+  custom_field_id: string;
+  custom_field?: CustomField;
+  value: string | string[] | number | boolean | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Create Custom Field DTO
+export interface CreateCustomFieldDTO {
+  name: string;
+  field_type: CustomFieldType;
+  project_id?: string | null;
+  options?: string[];
+  required?: boolean;
+  sort_order?: number;
+}
+
+// Update Custom Field DTO
+export interface UpdateCustomFieldDTO {
+  name?: string;
+  field_type?: CustomFieldType;
+  project_id?: string | null;
+  options?: string[];
+  required?: boolean;
+  sort_order?: number;
+}
+
+// Set Custom Field Value DTO
+export interface SetCustomFieldValueDTO {
+  value: string | string[] | number | boolean | null;
+}
+
+// Saved View Type
+export type SavedViewType = 'list' | 'kanban' | 'calendar' | 'timeline';
+
+// Saved View Interface
+export interface SavedView {
+  id: string;
+  name: string;
+  view_type: SavedViewType;
+  project_id?: string | null;
+  filters: TaskFilters;
+  sort_by?: string;
+  sort_order: 'asc' | 'desc';
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Create Saved View DTO
+export interface CreateSavedViewDTO {
+  name: string;
+  view_type: SavedViewType;
+  project_id?: string | null;
+  filters: TaskFilters;
+  sort_by?: string;
+  sort_order?: 'asc' | 'desc';
+  is_default?: boolean;
+}
+
+// Update Saved View DTO
+export interface UpdateSavedViewDTO {
+  name?: string;
+  view_type?: SavedViewType;
+  project_id?: string | null;
+  filters?: TaskFilters;
+  sort_by?: string;
+  sort_order?: 'asc' | 'desc';
+  is_default?: boolean;
+}
