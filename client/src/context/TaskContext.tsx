@@ -1,3 +1,5 @@
+'use client';
+
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import type { Task, TaskFilters, CreateTaskDTO, UpdateTaskDTO, TaskStatus, TreeNode, TaskProgressRollup, UpdateTaskProgressDTO, BulkUpdateDTO, BulkUpdateResponse, TaskPriority } from '../types';
 import * as api from '../services/api';

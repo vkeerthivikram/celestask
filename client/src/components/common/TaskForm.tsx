@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';

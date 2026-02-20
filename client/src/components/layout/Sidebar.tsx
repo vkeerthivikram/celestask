@@ -1,5 +1,7 @@
+'use client';
+
 import React, { useEffect, useRef } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useRouter, useParams, usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import {
@@ -31,8 +33,10 @@ const viewItems: { id: ViewType; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function Sidebar({ onAddProject }: SidebarProps) {
-  const { projectId } = useParams<{ projectId: string }>();
-  const navigate = useNavigate();
+  const params = useParams<{ projectId?: string }>();
+  const projectId = params?.projectId;
+  const router = useRouter();
+  const pathname = usePathname();
   const { sidebarOpen, setSidebarOpen, currentView, setCurrentView, setCurrentProjectId } = useApp();
   const { projects, currentProject, setCurrentProject } = useProjects();
   const { people } = usePeople();
@@ -52,7 +56,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
   const handleProjectClick = (project: typeof projects[0]) => {
     setCurrentProject(project);
     setCurrentProjectId(project.id);
-    navigate(`/projects/${project.id}/${currentView}`);
+    router.push(`/projects/${project.id}/${currentView}`);
     // Close sidebar on mobile
     if (window.innerWidth < 1024) {
       setSidebarOpen(false);
@@ -63,7 +67,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
   const handleViewChange = (view: ViewType) => {
     setCurrentView(view);
     if (currentProject) {
-      navigate(`/projects/${currentProject.id}/${view}`);
+      router.push(`/projects/${currentProject.id}/${view}`);
     }
     // Close sidebar on mobile
     if (window.innerWidth < 1024) {
@@ -73,7 +77,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
 
   // Handle people view click
   const handlePeopleClick = () => {
-    navigate('/people');
+    router.push('/people');
     // Close sidebar on mobile
     if (window.innerWidth < 1024) {
       setSidebarOpen(false);
@@ -104,7 +108,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
   };
 
   // Check if we're on the people page
-  const isPeoplePage = window.location.pathname.startsWith('/people');
+  const isPeoplePage = pathname?.startsWith('/people') ?? false;
   
   const sidebarContent = (
     <>

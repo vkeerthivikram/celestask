@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import type { CustomField, CustomFieldType, CreateCustomFieldDTO, UpdateCustomFieldDTO, Project } from '../../types';
 import { useProjects } from '../../context/ProjectContext';
@@ -329,7 +331,7 @@ export default function CustomFieldForm({
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" loading={loading}>
+          <Button type="submit" variant="primary" isLoading={loading}>
             {isEditing ? 'Update Field' : 'Create Field'}
           </Button>
         </div>

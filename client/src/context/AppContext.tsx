@@ -1,3 +1,5 @@
+'use client';
+
 import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import type { ViewType, ModalState, Task, Project } from '../types';
 
@@ -36,7 +38,7 @@ interface AppProviderProps {
 
 export function AppProvider({ children }: AppProviderProps) {
   // Initialize dark mode from localStorage or system preference
-  const [darkMode, setDarkMode] = useState(() => {
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('darkMode');
       if (stored !== null) {
@@ -90,11 +92,11 @@ export function AppProvider({ children }: AppProviderProps) {
     });
   }, []);
   
-  const openConfirmModal = useCallback((data: unknown) => {
+  const openConfirmModal = useCallback((_data?: unknown) => {
     setModal({
       isOpen: true,
       type: 'confirm',
-      data,
+      data: null,
     });
   }, []);
   

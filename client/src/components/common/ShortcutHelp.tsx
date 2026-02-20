@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import { Modal } from './Modal';
 import { useShortcuts, type ShortcutCategory } from '../../context/ShortcutContext';

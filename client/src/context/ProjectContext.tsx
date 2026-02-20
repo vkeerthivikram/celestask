@@ -1,3 +1,5 @@
+'use client';
+
 import React, { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { Project, CreateProjectDTO, UpdateProjectDTO, TreeNode, ProjectAssignee, ProjectAssigneeRole, CreateProjectAssigneeDTO } from '../types';
 import * as api from '../services/api';

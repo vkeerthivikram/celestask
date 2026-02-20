@@ -1,12 +1,14 @@
+'use client';
+
 import React, { useState, useCallback, useEffect } from 'react';
-import type { Note, EntityType, CreateNoteDTO, UpdateNoteDTO } from '../../types';
+import type { Note, NoteEntityType, CreateNoteDTO, UpdateNoteDTO } from '../../types';
 import { useNotes } from '../../context/NoteContext';
 import { NoteCard } from './NoteCard';
 import { NoteEditor } from './NoteEditor';
 import { Modal } from './Modal';
 
 interface NotesPanelProps {
-  entityType: EntityType;
+  entityType: NoteEntityType;
   entityId: string;
   title?: string;
   collapsible?: boolean;
@@ -29,7 +31,7 @@ export function NotesPanel({
   // Load notes when entity changes
   useEffect(() => {
     if (entityId) {
-      fetchNotes(entityType, entityId);
+      fetchNotes(entityType, parseInt(entityId, 10));
     }
   }, [entityType, entityId, fetchNotes]);
 

@@ -1,3 +1,5 @@
+'use client';
+
 import { useMemo } from 'react';
 import { useProjects, getProjectAncestors, useProjectSelection } from '../../context/ProjectContext';
 import { useApp } from '../../context/AppContext';

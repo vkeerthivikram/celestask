@@ -1,7 +1,9 @@
+'use client';
+
 import React, { useState, useCallback, ReactNode } from 'react';
 import type { TreeNode } from '../../types';
 
-interface TreeViewProps<T> {
+interface TreeViewProps<T extends { id: string | number }> {
   nodes: TreeNode<T>[];
   renderNode: (node: TreeNode<T>, depth: number, isExpanded: boolean, onToggle: () => void) => ReactNode;
   defaultExpanded?: boolean;
@@ -10,7 +12,7 @@ interface TreeViewProps<T> {
   className?: string;
 }
 
-function TreeViewInner<T>({
+function TreeViewInner<T extends { id: string | number }>({
   nodes,
   renderNode,
   defaultExpanded = false,
@@ -23,9 +25,7 @@ function TreeViewInner<T>({
       const allIds = new Set<string | number>();
       const collectIds = (nodeList: TreeNode<T>[]) => {
         nodeList.forEach((node) => {
-          if ('id' in node.data) {
-            allIds.add((node.data as { id: string | number }).id);
-          }
+          allIds.add(node.data.id);
           if (node.children.length > 0) {
             collectIds(node.children);
           }
@@ -39,7 +39,7 @@ function TreeViewInner<T>({
 
   const toggleNode = useCallback(
     (node: TreeNode<T>) => {
-      const nodeId = (node.data as { id: string | number }).id;
+      const nodeId = node.data.id;
       setExpandedNodes((prev) => {
         const newSet = new Set(prev);
         if (newSet.has(nodeId)) {
@@ -57,7 +57,7 @@ function TreeViewInner<T>({
 
   const renderTree = (nodeList: TreeNode<T>[], depth: number = 0): ReactNode => {
     return nodeList.map((node) => {
-      const nodeId = (node.data as { id: string | number }).id;
+      const nodeId = node.data.id;
       const isExpanded = expandedNodes.has(nodeId);
       const hasChildren = node.children.length > 0;
 
@@ -87,7 +87,7 @@ function TreeViewInner<T>({
 }
 
 // Export with generic support
-export function TreeView<T>(props: TreeViewProps<T>) {
+export function TreeView<T extends { id: string | number }>(props: TreeViewProps<T>) {
   return <TreeViewInner<T> {...props} />;
 }
 

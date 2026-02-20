@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import type { TaskFilters, CreateSavedViewDTO, SavedView } from '../../types';
 import Button from './Button';
@@ -137,11 +139,11 @@ export default function SaveViewModal({
           </div>
           {activeFilterCount > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
-              {currentFilters.status && currentFilters.status.length > 0 && (
-                <FilterBadge label={`Status: ${currentFilters.status.join(', ')}`} />
+              {currentFilters.status && (
+                <FilterBadge label={`Status: ${currentFilters.status}`} />
               )}
-              {currentFilters.priority && currentFilters.priority.length > 0 && (
-                <FilterBadge label={`Priority: ${currentFilters.priority.join(', ')}`} />
+              {currentFilters.priority && (
+                <FilterBadge label={`Priority: ${currentFilters.priority}`} />
               )}
               {currentFilters.assignee_id && (
                 <FilterBadge label="Assignee set" />
@@ -209,7 +211,7 @@ export default function SaveViewModal({
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" loading={loading}>
+          <Button type="submit" variant="primary" isLoading={loading}>
             {isEditing ? 'Update View' : 'Save View'}
           </Button>
         </div>

@@ -2,7 +2,7 @@
 
 A comprehensive architecture guide for a single-user, local-first project management web application similar to Jira.
 
-**Version: v1.3.0**
+**Version: v2.0.0**
 
 ---
 
@@ -40,9 +40,14 @@ This application is a **local-first, single-user** project management tool desig
 
 | Package | Version | Purpose |
 |---------|---------|---------|
+| `next` | ^15.5.12 | React framework with App Router (replaces Vite SPA) |
 | `react` | ^18.2.0 | UI library |
 | `react-dom` | ^18.2.0 | React DOM rendering |
-| `react-router-dom` | ^6.20.0 | Client-side routing |
+| `@radix-ui/react-dialog` | ^1.0.5 | shadcn/ui Dialog primitive |
+| `@radix-ui/react-dropdown-menu` | ^2.0.6 | shadcn/ui DropdownMenu primitive |
+| `@radix-ui/react-select` | ^2.0.0 | shadcn/ui Select primitive |
+| `@radix-ui/react-slot` | ^1.0.2 | shadcn/ui Slot utility |
+| `class-variance-authority` | ^0.7.0 | shadcn/ui variant system |
 | `@dnd-kit/core` | ^6.1.0 | Drag and drop for Kanban |
 | `@dnd-kit/sortable` | ^8.0.0 | Sortable drag and drop |
 | `@dnd-kit/utilities` | ^3.2.2 | DnD utility functions |
@@ -50,9 +55,10 @@ This application is a **local-first, single-user** project management tool desig
 | `react-big-calendar` | ^1.8.5 | Calendar view |
 | `recharts` | ^2.10.0 | Dashboard charts |
 | `lucide-react` | ^0.294.0 | Icon library |
-| `tailwindcss` | ^3.3.5 | CSS framework |
+| `tailwindcss` | ^3.3.6 | CSS framework |
+| `tailwindcss-animate` | ^1.0.7 | Tailwind animation utilities (used by shadcn/ui) |
 | `clsx` | ^2.0.0 | Conditional class names |
-| `uuid` | ^9.0.1 | Unique ID generation |
+| `tailwind-merge` | ^2.2.0 | Tailwind class merging |
 
 ### Backend
 
@@ -67,13 +73,40 @@ This application is a **local-first, single-user** project management tool desig
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `vite` | ^5.0.0 | Build tool and dev server |
+| `eslint-config-next` | ^15.2.9 | Next.js ESLint config (replaces Vite/React eslint plugins) |
 | `@types/react` | ^18.2.0 | React TypeScript types |
 | `typescript` | ^5.3.0 | TypeScript compiler |
 | `eslint` | ^8.55.0 | Code linting |
-| `prettier` | ^3.1.0 | Code formatting |
 | `concurrently` | ^8.2.2 | Run multiple dev servers |
-| `nodemon` | ^3.0.2 | Node.js auto-restart |
+
+### Key Configuration Files (Frontend)
+
+| File | Purpose |
+|------|---------|
+| `client/next.config.mjs` | Next.js configuration with `/api` proxy rewrite |
+| `client/components.json` | shadcn/ui component configuration |
+| `client/tsconfig.json` | TypeScript config for Next.js |
+| `client/tailwind.config.js` | Tailwind CSS configuration |
+| `client/postcss.config.js` | PostCSS configuration |
+| `client/src/app/layout.tsx` | Root layout with providers and global styles |
+| `client/src/app/globals.css` | Global CSS (Tailwind base + custom styles) |
+| `client/src/app/providers.tsx` | All React context providers |
+| `client/src/lib/utils.ts` | `cn()` utility for shadcn/ui |
+| `client/src/components/ui/` | shadcn/ui component library |
+
+---
+
+## Routing (Next.js App Router)
+
+The application uses Next.js App Router file-based routing:
+
+| Route | File | Description |
+|-------|------|-------------|
+| `/` | `src/app/page.tsx` | Redirects to first project's kanban view |
+| `/people` | `src/app/people/page.tsx` | People management view |
+| `/projects/[projectId]/[view]` | `src/app/projects/[projectId]/[view]/page.tsx` | Dynamic project view (kanban/list/calendar/timeline/dashboard) |
+
+All routes use the shared `Layout` component (Header + Sidebar) and are wrapped by context providers defined in `src/app/providers.tsx`.
 
 ---
 
@@ -85,46 +118,64 @@ task-tracking/
 ├── ARCHITECTURE.md                 # This document
 ├── README.md                       # Project documentation
 │
-├── client/                         # Frontend React application
+├── client/                         # Frontend Next.js application
 │   ├── package.json
-│   ├── vite.config.ts
+│   ├── next.config.mjs             # Next.js configuration + API proxy
+│   ├── components.json             # shadcn/ui configuration
 │   ├── tsconfig.json
 │   ├── tailwind.config.js
 │   ├── postcss.config.js
-│   ├── index.html
 │   │
 │   ├── public/
 │   │   └── favicon.ico
 │   │
 │   └── src/
-│       ├── main.tsx               # Application entry point
-│       ├── App.tsx                # Root component with routing
-│       ├── index.css              # Global styles + Tailwind
+│       ├── app/                   # Next.js App Router
+│       │   ├── layout.tsx         # Root layout (providers, global styles)
+│       │   ├── page.tsx           # Root page (redirects to first project)
+│       │   ├── globals.css        # Global styles + Tailwind
+│       │   ├── providers.tsx      # All React context providers
+│       │   ├── global-ui.tsx      # Global UI (toast, shortcuts, command palette)
+│       │   ├── people/
+│       │   │   └── page.tsx       # People management view
+│       │   └── projects/
+│       │       └── [projectId]/
+│       │           └── [view]/
+│       │               └── page.tsx  # Dynamic project view
 │       │
 │       ├── components/
-│       │   ├── common/
+│       │   ├── ui/                # shadcn/ui components
+│       │   │   ├── button.tsx
+│       │   │   ├── badge.tsx
+│       │   │   ├── card.tsx
+│       │   │   ├── dialog.tsx
+│       │   │   └── dropdown-menu.tsx
+│       │   │
+│       │   ├── common/            # Custom common components
 │       │   │   ├── Button.tsx
-│       │   │   ├── Input.tsx
-│       │   │   ├── Select.tsx
 │       │   │   ├── Modal.tsx
 │       │   │   ├── Badge.tsx
 │       │   │   ├── Card.tsx
-│       │   │   ├── Dropdown.tsx
-│       │   │   ├── EmptyState.tsx
-│       │   │   └── LoadingSpinner.tsx
+│       │   │   └── ...
 │       │   │
 │       │   ├── layout/
 │       │   │   ├── Header.tsx
 │       │   │   ├── Sidebar.tsx
-│       │   │   ├── Layout.tsx
-│       │   │   └── ProjectSelector.tsx
+│       │   │   └── Layout.tsx
 │       │   │
-│       │   ├── tasks/
-│       │   │   ├── TaskCard.tsx
-│       │   │   ├── TaskForm.tsx
-│       │   │   ├── TaskDetail.tsx
-│       │   │   ├── TaskList.tsx
-│       │   │   ├── TaskFilters.tsx
+│       │   ├── kanban/
+│       │   ├── list/
+│       │   ├── calendar/
+│       │   ├── timeline/
+│       │   ├── dashboard/
+│       │   └── people/
+│       │
+│       ├── context/               # React Context providers
+│       ├── hooks/                 # Custom React hooks
+│       ├── lib/
+│       │   └── utils.ts           # cn() utility for shadcn/ui
+│       ├── services/              # API service layer
+│       └── types/                 # TypeScript type definitions
 │       │   │   └── PriorityBadge.tsx
 │       │   │
 │       │   ├── kanban/

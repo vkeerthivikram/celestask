@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';

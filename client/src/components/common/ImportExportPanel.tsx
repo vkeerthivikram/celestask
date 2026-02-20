@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '../../context/ToastContext';
 import { api } from '../../services/api';

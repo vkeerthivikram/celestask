@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useMemo, useCallback } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -191,29 +193,29 @@ export function ListView() {
 
   // Handle select all toggle
   const handleSelectAll = useCallback(() => {
-    if (isAllSelected(sortedTasks.map(t => t.id))) {
+    if (isAllSelected) {
       clearSelection();
     } else {
-      selectAllTasks(sortedTasks.map(t => t.id));
+      selectAllTasks();
     }
-  }, [sortedTasks, isAllSelected, selectAllTasks, clearSelection]);
+  }, [isAllSelected, selectAllTasks, clearSelection]);
 
   // Bulk operations
   const handleBulkStatusChange = useCallback(async (status: TaskStatus) => {
-    await bulkUpdateTasks(selectedTaskIds, { status });
-  }, [selectedTaskIds, bulkUpdateTasks]);
+    await bulkUpdateTasks({ status });
+  }, [bulkUpdateTasks]);
 
   const handleBulkPriorityChange = useCallback(async (priority: TaskPriority) => {
-    await bulkUpdateTasks(selectedTaskIds, { priority });
-  }, [selectedTaskIds, bulkUpdateTasks]);
+    await bulkUpdateTasks({ priority });
+  }, [bulkUpdateTasks]);
 
   const handleBulkAssigneeChange = useCallback(async (assigneeId: number | null) => {
-    await bulkUpdateTasks(selectedTaskIds, { assignee_id: assigneeId });
-  }, [selectedTaskIds, bulkUpdateTasks]);
+    await bulkUpdateTasks({ assignee_id: assigneeId });
+  }, [bulkUpdateTasks]);
 
   const handleBulkDelete = useCallback(async () => {
-    await bulkDeleteTasks(Array.from(selectedTaskIds));
-  }, [selectedTaskIds, bulkDeleteTasks]);
+    await bulkDeleteTasks();
+  }, [bulkDeleteTasks]);
 
   // Loading state
   if (loading) {
@@ -239,7 +241,7 @@ export function ListView() {
     );
   }
 
-  const selectedCount = selectedTaskIds.size;
+  const selectedCount = selectedTaskIds.length;
 
   return (
     <div className="h-full flex flex-col pb-16">
@@ -293,20 +295,20 @@ export function ListView() {
                       <div
                         className={clsx(
                           'w-5 h-5 rounded border-2 flex items-center justify-center cursor-pointer transition-colors',
-                          isAllSelected(sortedTasks.map(t => t.id))
+                          isAllSelected
                             ? 'bg-blue-600 border-blue-600'
-                            : isPartialSelected(sortedTasks.map(t => t.id))
+                            : isPartialSelected
                             ? 'bg-blue-600 border-blue-600'
                             : 'border-gray-300 dark:border-gray-600 hover:border-blue-400'
                         )}
                         onClick={handleSelectAll}
                         role="checkbox"
-                        aria-checked={isAllSelected(sortedTasks.map(t => t.id))}
+                        aria-checked={isAllSelected}
                         aria-label="Select all tasks"
                       >
-                        {isAllSelected(sortedTasks.map(t => t.id)) ? (
+                        {isAllSelected ? (
                           <Check className="w-3 h-3 text-white" aria-hidden="true" />
-                        ) : isPartialSelected(sortedTasks.map(t => t.id)) ? (
+                        ) : isPartialSelected ? (
                           <Check className="w-3 h-3 text-white" aria-hidden="true" />
                         ) : null}
                       </div>

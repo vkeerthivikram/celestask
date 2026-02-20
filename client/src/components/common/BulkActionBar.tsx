@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useRef, useEffect } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -40,7 +42,7 @@ export function BulkActionBar({
   onClearSelection,
 }: BulkActionBarProps) {
   const { people } = usePeople();
-  const { showToast } = useToast();
+  const { success: toastSuccess, error: toastError } = useToast();
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
@@ -76,9 +78,9 @@ export function BulkActionBar({
     setLoadingAction('status');
     try {
       await onStatusChange(status);
-      showToast(`Updated status to "${status}" for ${selectedCount} task${selectedCount !== 1 ? 's' : ''}`, 'success');
+      toastSuccess(`Updated status to "${status}" for ${selectedCount} task${selectedCount !== 1 ? 's' : ''}`);
     } catch (error) {
-      showToast('Failed to update status', 'error');
+      toastError('Failed to update status');
     } finally {
       setIsLoading(false);
       setLoadingAction(null);
@@ -91,9 +93,9 @@ export function BulkActionBar({
     setLoadingAction('priority');
     try {
       await onPriorityChange(priority);
-      showToast(`Updated priority to "${priority}" for ${selectedCount} task${selectedCount !== 1 ? 's' : ''}`, 'success');
+      toastSuccess(`Updated priority to "${priority}" for ${selectedCount} task${selectedCount !== 1 ? 's' : ''}`);
     } catch (error) {
-      showToast('Failed to update priority', 'error');
+      toastError('Failed to update priority');
     } finally {
       setIsLoading(false);
       setLoadingAction(null);
@@ -109,9 +111,9 @@ export function BulkActionBar({
       const assigneeName = assigneeId 
         ? people.find(p => p.id === assigneeId)?.name || 'Unknown'
         : 'Unassigned';
-      showToast(`Assigned ${selectedCount} task${selectedCount !== 1 ? 's' : ''} to "${assigneeName}"`, 'success');
+      toastSuccess(`Assigned ${selectedCount} task${selectedCount !== 1 ? 's' : ''} to "${assigneeName}"`);
     } catch (error) {
-      showToast('Failed to update assignee', 'error');
+      toastError('Failed to update assignee');
     } finally {
       setIsLoading(false);
       setLoadingAction(null);
@@ -124,9 +126,9 @@ export function BulkActionBar({
     setLoadingAction('delete');
     try {
       await onDelete();
-      showToast(`Deleted ${selectedCount} task${selectedCount !== 1 ? 's' : ''}`, 'success');
+      toastSuccess(`Deleted ${selectedCount} task${selectedCount !== 1 ? 's' : ''}`);
     } catch (error) {
-      showToast('Failed to delete tasks', 'error');
+      toastError('Failed to delete tasks');
     } finally {
       setIsLoading(false);
       setLoadingAction(null);

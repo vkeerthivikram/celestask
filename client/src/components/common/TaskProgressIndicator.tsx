@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useCallback } from 'react';
 import type { Task, TaskProgressRollup } from '../../types';
 import { ProgressBar } from './ProgressBar';
@@ -109,8 +111,8 @@ export function TaskProgressIndicator({
             max="100"
             value={progress}
             onChange={(e) => setProgress(Number(e.target.value))}
-            onMouseUp={handleProgressChange}
-            onBlur={handleProgressChange}
+            onMouseUp={(e) => handleProgressChange(Number((e.target as HTMLInputElement).value))}
+            onBlur={(e) => handleProgressChange(Number(e.target.value))}
             className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
           />
           <span className="text-sm font-medium text-gray-600 w-12 text-right">
