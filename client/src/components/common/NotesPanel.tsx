@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useCallback, useEffect } from 'react';
 import type { Note, EntityType, CreateNoteDTO, UpdateNoteDTO } from '../../types';
 import { useNotes } from '../../context/NoteContext';

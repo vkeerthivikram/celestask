@@ -1,3 +1,5 @@
+'use client';
+
 import React, { type ReactNode, useState, useCallback } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';

@@ -1,3 +1,5 @@
+'use client';
+
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import type { Person, CreatePersonDTO, UpdatePersonDTO } from '../types';
 import * as api from '../services/api';

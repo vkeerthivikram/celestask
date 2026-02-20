@@ -1,3 +1,5 @@
+'use client';
+
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import type { Note, CreateNoteDTO, UpdateNoteDTO, NoteEntityType } from '../types';
 import * as api from '../services/api';

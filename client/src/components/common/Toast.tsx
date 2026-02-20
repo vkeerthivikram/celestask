@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useState } from 'react';
 import type { Toast as ToastType, ToastType as ToastVariant } from '../../context/ToastContext';
 

@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import type { CustomField, CustomFieldType, CreateCustomFieldDTO, UpdateCustomFieldDTO, Project } from '../../types';
 import { useProjects } from '../../context/ProjectContext';

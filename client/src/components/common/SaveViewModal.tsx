@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import type { TaskFilters, CreateSavedViewDTO, SavedView } from '../../types';
 import Button from './Button';

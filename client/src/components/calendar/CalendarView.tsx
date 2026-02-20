@@ -1,5 +1,7 @@
+'use client';
+
 import React, { useState, useCallback, useMemo } from 'react';
-import { Calendar, momentLocalizer, Views } from 'react-big-calendar';
+import { Calendar, momentLocalizer, Views, type View } from 'react-big-calendar';
 import moment from 'moment';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -31,7 +33,7 @@ export function CalendarView() {
   const { tasks, createTask, updateTask } = useTasks();
   const { currentProject } = useProjects();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [view, setView] = useState(Views.MONTH);
+  const [view, setView] = useState<View>(Views.MONTH);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);

@@ -1,3 +1,5 @@
+'use client';
+
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import type { SavedView, CreateSavedViewDTO, UpdateSavedViewDTO, TaskFilters } from '../types';
 import * as api from '../services/api';

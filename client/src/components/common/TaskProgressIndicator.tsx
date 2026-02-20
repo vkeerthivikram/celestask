@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useCallback } from 'react';
 import type { Task, TaskProgressRollup } from '../../types';
 import { ProgressBar } from './ProgressBar';

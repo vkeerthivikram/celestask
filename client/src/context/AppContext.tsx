@@ -1,3 +1,5 @@
+'use client';
+
 import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import type { ViewType, ModalState, Task, Project } from '../types';
 

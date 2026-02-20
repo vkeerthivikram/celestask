@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useCallback, ReactNode } from 'react';
 import type { TreeNode } from '../../types';
 

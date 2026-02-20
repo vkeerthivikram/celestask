@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useCallback } from 'react';
 import type { Note, CreateNoteDTO, UpdateNoteDTO } from '../../types';
 
