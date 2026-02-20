@@ -1,3 +1,5 @@
+// CommonJS format is required for Next.js Tailwind integration
+// (Next.js reads postcss/tailwind configs via require(), not ES module import)
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
