@@ -15,3 +15,7 @@ _bmad-output/
 *.db-wal
 *.db-shm
 server/data/*.db
+
+# Next.js build artifacts
+client/.next/
+client/next-env.d.ts
