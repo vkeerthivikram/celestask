@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import Link from 'next/link';
 import { useRouter, useParams, usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';

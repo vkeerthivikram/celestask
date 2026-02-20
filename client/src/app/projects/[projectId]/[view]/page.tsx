@@ -46,7 +46,7 @@ export default function ProjectViewPage() {
     if (!loading && projects.length > 0 && projectId && !isNaN(projectId)) {
       const found = projects.find((p) => p.id === projectId);
       if (!found) {
-        router.replace(`/projects/${projects[0].id}/${view || 'kanban'}`);
+        router.replace(`/projects/${projects[0].id}/${view}`);
       }
     }
   }, [loading, projects, projectId, view, router]);

@@ -45,7 +45,6 @@
   }
   
   body {
-    @apply bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100;
     background-color: var(--color-background);
     color: var(--color-text-primary);
   }
@@ -124,31 +123,31 @@
   
   /* Animation utilities */
   .animate-fade-in {
-    animation: fadeIn 0.2s ease-in-out;
+    animation: fade-in 0.2s ease-in-out;
   }
   
   .animate-slide-up {
-    animation: slideUp 0.2s ease-out;
+    animation: slide-up 0.2s ease-out;
   }
   
   .animate-slide-down {
-    animation: slideDown 0.2s ease-out;
+    animation: slide-down 0.2s ease-out;
   }
   
   .animate-scale-in {
-    animation: scaleIn 0.15s ease-out;
+    animation: scale-in 0.15s ease-out;
   }
   
   .animate-slide-in-right {
-    animation: slideInRight 0.2s ease-out;
+    animation: slide-in-right 0.2s ease-out;
   }
   
-  @keyframes fadeIn {
+  @keyframes fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
   }
   
-  @keyframes slideUp {
+  @keyframes slide-up {
     from { 
       opacity: 0;
       transform: translateY(10px);
@@ -159,7 +158,7 @@
     }
   }
   
-  @keyframes slideDown {
+  @keyframes slide-down {
     from { 
       opacity: 0;
       transform: translateY(-10px);
@@ -170,7 +169,7 @@
     }
   }
   
-  @keyframes scaleIn {
+  @keyframes scale-in {
     from { 
       opacity: 0;
       transform: scale(0.95);
@@ -181,7 +180,7 @@
     }
   }
   
-  @keyframes slideInRight {
+  @keyframes slide-in-right {
     from { 
       opacity: 0;
       transform: translateX(100%);

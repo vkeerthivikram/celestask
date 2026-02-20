@@ -40,7 +40,7 @@ This application is a **local-first, single-user** project management tool desig
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `next` | ^15.2.9 | React framework with App Router (replaces Vite SPA) |
+| `next` | ^15.5.12 | React framework with App Router (replaces Vite SPA) |
 | `react` | ^18.2.0 | UI library |
 | `react-dom` | ^18.2.0 | React DOM rendering |
 | `@radix-ui/react-dialog` | ^1.0.5 | shadcn/ui Dialog primitive |

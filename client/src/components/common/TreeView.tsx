@@ -3,7 +3,7 @@
 import React, { useState, useCallback, ReactNode } from 'react';
 import type { TreeNode } from '../../types';
 
-interface TreeViewProps<T extends object> {
+interface TreeViewProps<T extends { id: string | number }> {
   nodes: TreeNode<T>[];
   renderNode: (node: TreeNode<T>, depth: number, isExpanded: boolean, onToggle: () => void) => ReactNode;
   defaultExpanded?: boolean;
@@ -12,7 +12,7 @@ interface TreeViewProps<T extends object> {
   className?: string;
 }
 
-function TreeViewInner<T extends object>({
+function TreeViewInner<T extends { id: string | number }>({
   nodes,
   renderNode,
   defaultExpanded = false,
@@ -25,9 +25,7 @@ function TreeViewInner<T extends object>({
       const allIds = new Set<string | number>();
       const collectIds = (nodeList: TreeNode<T>[]) => {
         nodeList.forEach((node) => {
-          if ('id' in node.data) {
-            allIds.add((node.data as { id: string | number }).id);
-          }
+          allIds.add(node.data.id);
           if (node.children.length > 0) {
             collectIds(node.children);
           }
@@ -41,7 +39,7 @@ function TreeViewInner<T extends object>({
 
   const toggleNode = useCallback(
     (node: TreeNode<T>) => {
-      const nodeId = (node.data as { id: string | number }).id;
+      const nodeId = node.data.id;
       setExpandedNodes((prev) => {
         const newSet = new Set(prev);
         if (newSet.has(nodeId)) {
@@ -59,7 +57,7 @@ function TreeViewInner<T extends object>({
 
   const renderTree = (nodeList: TreeNode<T>[], depth: number = 0): ReactNode => {
     return nodeList.map((node) => {
-      const nodeId = (node.data as { id: string | number }).id;
+      const nodeId = node.data.id;
       const isExpanded = expandedNodes.has(nodeId);
       const hasChildren = node.children.length > 0;
 
@@ -89,7 +87,7 @@ function TreeViewInner<T extends object>({
 }
 
 // Export with generic support
-export function TreeView<T extends object>(props: TreeViewProps<T>) {
+export function TreeView<T extends { id: string | number }>(props: TreeViewProps<T>) {
   return <TreeViewInner<T> {...props} />;
 }
 
