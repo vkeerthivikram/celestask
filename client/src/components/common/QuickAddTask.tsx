@@ -31,7 +31,7 @@ const priorityConfig: Record<TaskPriority, { label: string; color: string }> = {
 
 export function QuickAddTask({ className }: QuickAddTaskProps) {
   const [title, setTitle] = useState('');
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [dueDate, setDueDate] = useState<string>('');
   const [isExpanded, setIsExpanded] = useState(false);
@@ -99,7 +99,7 @@ export function QuickAddTask({ className }: QuickAddTaskProps) {
     try {
       await createTask({
         title: title.trim(),
-        project_id: Number(effectiveProjectId),
+        project_id: effectiveProjectId,
         status: 'todo',
         priority,
         due_date: dueDate || undefined,
@@ -228,7 +228,7 @@ export function QuickAddTask({ className }: QuickAddTaskProps) {
                       role="option"
                       aria-selected={effectiveProjectId === project.id}
                       onClick={() => {
-                        setSelectedProjectId(String(project.id));
+                        setSelectedProjectId(project.id);
                         setShowProjectDropdown(false);
                       }}
                       className={twMerge(

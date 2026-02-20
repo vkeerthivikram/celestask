@@ -37,7 +37,7 @@ export default function HomePage() {
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             Get started by creating your first project.
           </p>
-          <p className="text-sm text-gray-500 dark:text-gray-500">
+          <p className="text-sm text-gray-500">
             Click the &quot;+&quot; button in the sidebar to create a project.
           </p>
         </div>
