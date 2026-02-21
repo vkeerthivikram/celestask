@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { ViewType, ModalState, Task, Project } from '../types';
 
 interface AppContextType {
@@ -37,18 +37,8 @@ interface AppProviderProps {
 }
 
 export function AppProvider({ children }: AppProviderProps) {
-  // Initialize dark mode from localStorage or system preference
-  const [darkMode, setDarkMode] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('darkMode');
-      if (stored !== null) {
-        return JSON.parse(stored);
-      }
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
-    return false;
-  });
-  
+  // Initialize with false to match server-side render, will be updated by effect
+  const [darkMode, setDarkMode] = useState<boolean>(false);
   const [currentView, setCurrentView] = useState<ViewType>('kanban');
   const [currentProjectId, setCurrentProjectId] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -58,8 +48,30 @@ export function AppProvider({ children }: AppProviderProps) {
     data: null,
   });
   
-  // Apply dark mode class to document
-  React.useEffect(() => {
+  // Initialize dark mode from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('darkMode');
+    if (stored !== null) {
+      const isDark = JSON.parse(stored);
+      setDarkMode(isDark);
+      // Sync with DOM in case the inline script didn't run
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    } else {
+      // Check system preference
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setDarkMode(prefersDark);
+      if (prefersDark) {
+        document.documentElement.classList.add('dark');
+      }
+    }
+  }, []);
+  
+  // Update DOM and localStorage when darkMode changes
+  useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {

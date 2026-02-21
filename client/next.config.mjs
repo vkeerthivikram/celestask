@@ -12,6 +12,8 @@ const shouldIgnoreTypeErrors = process.env.NEXT_IGNORE_BUILD_ERRORS === 'true';
 const nextConfig = {
   // Silence the workspace root warning (monorepo with multiple lockfiles)
   outputFileTracingRoot: __dirname,
+  // Enable standalone output for Docker
+  output: 'standalone',
   typescript: {
     ignoreBuildErrors: shouldIgnoreTypeErrors,
   },
@@ -19,7 +21,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: `http://localhost:${process.env.BACKEND_PORT || '19096'}/api/:path*`,
+        destination: `http://backend:19096/api/:path*`,
       },
     ];
   },
