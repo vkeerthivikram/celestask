@@ -21,6 +21,7 @@ import { useProjects } from '../../context/ProjectContext';
 import { APP_THEME_OPTIONS } from '../../types';
 import { QuickAddTask } from '../common/QuickAddTask';
 import { Breadcrumbs } from '../common/Breadcrumbs';
+import { Logo } from '../ui/Logo';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -89,12 +90,14 @@ export function Header() {
         {/* Project Title & View - Mobile */}
         <div className="flex flex-col md:hidden">
           <div className="flex items-center gap-2">
-            {currentProject && (
+            {currentProject ? (
               <div
                 className="w-3 h-3 rounded-sm"
                 style={{ backgroundColor: currentProject.color }}
                 aria-hidden="true"
               />
+            ) : (
+              <Logo className="w-5 h-5" variant="navbar" />
             )}
             <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
               {currentProject?.name || 'Celestask'}

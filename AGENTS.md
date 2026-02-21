@@ -65,6 +65,8 @@ credentials: true
 ```
 celestask/
 ├── AGENTS.md                    # This documentation file
+├── docker-compose.yml           # Production Docker Compose
+├── docker-compose.dev.yml       # Development Docker Compose override
 ├── README.md                    # Project documentation
 ├── docs/
 │   └── ROADMAP.md              # Product roadmap
@@ -73,6 +75,7 @@ celestask/
 ├── Makefile                     # Build and development commands
 │
 ├── server/                      # Backend Express application
+│   ├── Dockerfile               # Production backend image
 │   ├── package.json
 │   ├── index.js                 # Server entry point with all route imports
 │   ├── data/
@@ -92,6 +95,8 @@ celestask/
 │       └── importExport.js      # Import/Export API (4 endpoints)
 │
 └── client/                      # Frontend Next.js application
+  ├── Dockerfile               # Production image (Next.js standalone)
+  ├── Dockerfile.dev           # Development image
     ├── package.json
     ├── next.config.mjs          # Next.js config with API rewrites
     ├── tailwind.config.js       # Tailwind CSS configuration
@@ -103,6 +108,7 @@ celestask/
         ├── app/                 # Next.js App Router
         │   ├── layout.tsx       # Root layout with Providers
         │   ├── page.tsx         # Home page (redirects to first project)
+        │   ├── icon.svg         # App/browser icon (moon-over-sun mark)
         │   ├── providers.tsx    # Context provider hierarchy
         │   ├── global-ui.tsx    # Global UI components (toasts, modals)
         │   ├── globals.css      # Global styles and CSS variables
@@ -136,15 +142,17 @@ celestask/
         │   └── CommandPaletteContext.tsx
         │
         └── components/
-            ├── ui/              # shadcn/ui components (5 files)
+            ├── ui/              # UI components (6 files)
             │   ├── button.tsx
             │   ├── card.tsx
             │   ├── badge.tsx
             │   ├── dialog.tsx
             │   └── dropdown-menu.tsx
+            │   └── Logo.tsx
             │
-            ├── common/          # Reusable components (31 files)
+            ├── common/          # Reusable components (32 files)
             │   ├── Button.tsx, Card.tsx, Badge.tsx, Modal.tsx
+            │   ├── AppContextMenu.tsx
             │   ├── ProgressBar.tsx
             │   ├── TreeView.tsx
             │   ├── ProjectTreeNode.tsx, TaskTreeNode.tsx
@@ -254,6 +262,7 @@ All commands are run from the repository root:
 | priority | TEXT | - | 'medium' |
 | due_date | DATE | - | NULL |
 | start_date | DATE | - | NULL |
+| end_date | DATE | - | NULL |
 | assignee_id | TEXT | REFERENCES people(id) | NULL |
 | parent_task_id | INTEGER | REFERENCES tasks(id) ON DELETE SET NULL | NULL |
 | progress_percent | INTEGER | - | 0 |
@@ -881,9 +890,9 @@ All context hooks follow the pattern `use[ContextName]()`:
 - `usePeople()`, `useTags()`, `useNotes()`, `useCustomFields()`
 - `useSavedViews()`, `useShortcuts()`, `useCommandPalette()`
 
-### 6.6 Components (50 Components)
+### 6.6 Components (51 Components)
 
-#### UI Components (shadcn/ui - 5 files)
+#### UI Components (6 files)
 Located in `components/ui/`:
 
 | Component | Description | Variants |
@@ -893,6 +902,7 @@ Located in `components/ui/`:
 | `badge.tsx` | Badge/label component | default, secondary, destructive, outline |
 | `dialog.tsx` | Modal dialog | Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription |
 | `dropdown-menu.tsx` | Dropdown menu | DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, etc. |
+| `Logo.tsx` | Celestask moon-over-sun brand mark | `main`, `navbar` |
 
 #### Common Components (31 files)
 Located in `components/common/`:
@@ -1264,6 +1274,17 @@ module.exports = {
 - `next.config.mjs` with rewrites
 - `components.json` for shadcn configuration
 - Removed `vite.config.ts`, `index.html`
+
+### v2.1.0 - UX, Theming, Docker & Branding Refresh (2026-02-21)
+- Added Docker support across backend/frontend (`Dockerfile`, `.dockerignore`, compose files)
+- Added backend host/port configurability in Next.js rewrites for containerized and local setups
+- Added task `end_date` support across DB schema, API routes, forms, and view rendering
+- Introduced reusable `AppContextMenu` and context-menu actions across list/kanban/calendar/timeline/dashboard/tree/people views
+- Expanded global theming with 16 app themes and persisted theme selection in `AppContext`
+- Enhanced quick actions (header dropdown, command palette, sub-project/sub-task/person modal flows)
+- Renamed product branding and storage/export naming to Celestask (`celestask.db`, backup/export filenames)
+- Added reusable logo component (`components/ui/Logo.tsx`) and wired branding in `Header`/`Sidebar`
+- Added app icon at `app/icon.svg` using the same moon-over-sun identity
 
 ---
 

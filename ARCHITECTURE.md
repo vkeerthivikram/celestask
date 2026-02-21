@@ -89,10 +89,30 @@ This application is a **local-first, single-user** project management tool desig
 | `client/tailwind.config.js` | Tailwind CSS configuration |
 | `client/postcss.config.js` | PostCSS configuration |
 | `client/src/app/layout.tsx` | Root layout with providers and global styles |
+| `client/src/app/icon.svg` | App/browser icon (moon-over-sun brand mark) |
 | `client/src/app/globals.css` | Global CSS (Tailwind base + custom styles) |
 | `client/src/app/providers.tsx` | All React context providers |
 | `client/src/lib/utils.ts` | `cn()` utility for shadcn/ui |
 | `client/src/components/ui/` | shadcn/ui component library |
+| `client/src/components/ui/Logo.tsx` | Reusable Celestask logo component (`main`, `navbar`) |
+
+### Branding & Logo
+
+| Asset | Location | Notes |
+|-------|----------|-------|
+| Primary app icon | `client/src/app/icon.svg` | Used by Next.js for app/browser icon |
+| Reusable logo component | `client/src/components/ui/Logo.tsx` | Shared in layout surfaces (header/sidebar) |
+| Logo style | Moon-over-sun | Both symbols remain visible with stronger moon overlap |
+
+#### Logo Usage
+
+```tsx
+// Sidebar brand area
+<Logo className="w-12 h-12" variant="main" />
+
+// Header mobile fallback (when no project selected)
+<Logo className="w-5 h-5" variant="navbar" />
+```
 
 ---
 

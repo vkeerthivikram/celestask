@@ -19,6 +19,7 @@ import { useApp } from '../../context/AppContext';
 import { useProjects } from '../../context/ProjectContext';
 import type { Project, ViewType } from '../../types';
 import { AppContextMenu } from '../common/AppContextMenu';
+import { Logo } from '../ui/Logo';
 
 interface SidebarProps {
   onAddProject?: () => void;
@@ -41,7 +42,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
   const { projects, currentProject, setCurrentProject, deleteProject } = useProjects();
   const sidebarRef = useRef<HTMLElement>(null);
   const [contextMenuState, setContextMenuState] = useState<{ x: number; y: number; project: Project } | null>(null);
-  
+
   // Update current project based on URL
   useEffect(() => {
     if (projectId) {
@@ -51,7 +52,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
       }
     }
   }, [projectId, setCurrentProjectId]);
-  
+
   // Handle project click
   const handleProjectClick = (project: Project) => {
     setCurrentProject(project);
@@ -115,7 +116,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
       },
     ];
   }, [contextMenuState, openSubProjectModal, openProjectModal]);
-  
+
   // Handle view change
   const handleViewChange = (view: ViewType) => {
     setCurrentView(view);
@@ -136,7 +137,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
       setSidebarOpen(false);
     }
   };
-  
+
   // Close sidebar when clicking outside on mobile
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -149,21 +150,21 @@ export function Sidebar({ onAddProject }: SidebarProps) {
         setSidebarOpen(false);
       }
     };
-    
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [sidebarOpen, setSidebarOpen]);
 
   // Check if we're on the people page
   const isPeoplePage = pathname?.startsWith('/people') ?? false;
-  
+
   const sidebarContent = (
     <>
       {/* Logo / Brand */}
       <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary-500 flex items-center justify-center">
-            <Kanban className="w-5 h-5 text-white" />
+          <div className="w-12 h-12 flex items-center justify-center">
+            <Logo className="w-12 h-12" variant="main" />
           </div>
           <span className="font-semibold text-gray-900 dark:text-gray-100">
             Celestask
@@ -177,7 +178,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
           <X className="w-5 h-5" />
         </button>
       </div>
-      
+
       {/* View Switcher */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-700">
         <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
@@ -228,7 +229,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
           </button>
         </nav>
       </div>
-      
+
       {/* Projects List */}
       <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
         <div className="flex items-center justify-between mb-2">
@@ -245,7 +246,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
             </button>
           )}
         </div>
-        
+
         {projects.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -328,7 +329,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
       </div>
     </>
   );
-  
+
   return (
     <>
       {/* Desktop Sidebar */}
@@ -346,7 +347,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
       >
         {sidebarContent}
       </aside>
-      
+
       {/* Mobile Sidebar (Overlay) */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
@@ -355,7 +356,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
             className="fixed inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setSidebarOpen(false)}
           />
-          
+
           {/* Sidebar */}
           <aside
             className={twMerge(
