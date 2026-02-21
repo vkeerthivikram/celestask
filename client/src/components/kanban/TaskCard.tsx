@@ -116,24 +116,23 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onCreateSubTa
         aria-hidden="true"
       />
 
+      {onCreateSubTask && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onCreateSubTask(task.id);
+          }}
+          className="absolute top-2 right-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+          title="Add sub-task"
+          aria-label="Add sub-task"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      )}
+
       {/* Card content */}
       <div className="pl-2">
-        {onCreateSubTask && (
-          <div className="flex justify-end mb-1">
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onCreateSubTask(task.id);
-              }}
-              className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-              title="Add sub-task"
-              aria-label="Add sub-task"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-        )}
 
         {/* Subtask indicator */}
         {isSubtask && (

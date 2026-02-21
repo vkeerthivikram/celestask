@@ -16,7 +16,7 @@ import { useTasks } from '../../context/TaskContext';
 import { useProjects } from '../../context/ProjectContext';
 import { useToast } from '../../context/ToastContext';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
-import { TaskPriority, Project } from '../../types';
+import { TaskPriority } from '../../types';
 
 interface QuickAddTaskProps {
   className?: string;
@@ -38,64 +38,66 @@ export function QuickAddTask({ className }: QuickAddTaskProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
-  
+
   const inputRef = useRef<HTMLInputElement>(null);
+  const quickAddRef = useRef<HTMLDivElement>(null);
   const projectDropdownRef = useRef<HTMLDivElement>(null);
   const priorityDropdownRef = useRef<HTMLDivElement>(null);
-  
+
   const { createTask } = useTasks();
   const { projects, currentProject } = useProjects();
   const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
-  
-  // Get the effective project ID (selected or current)
+
   const effectiveProjectId = selectedProjectId || currentProject?.id;
-  const selectedProject = projects.find(p => p.id === effectiveProjectId);
-  
-  // Register keyboard shortcut 'n' to focus input
+  const selectedProject = projects.find((p) => p.id === effectiveProjectId);
+
   useKeyboardShortcuts({
     shortcuts: [
       {
         key: 'n',
-        action: () => {
-          if (inputRef.current) {
-            inputRef.current.focus();
-          }
-        },
+        action: () => inputRef.current?.focus(),
         description: 'Focus quick add task input',
       },
     ],
   });
-  
-  // Close dropdowns when clicking outside
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (projectDropdownRef.current && !projectDropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+
+      if (quickAddRef.current && !quickAddRef.current.contains(target)) {
+        setShowProjectDropdown(false);
+        setShowPriorityDropdown(false);
+        setIsExpanded(false);
+        return;
+      }
+
+      if (projectDropdownRef.current && !projectDropdownRef.current.contains(target)) {
         setShowProjectDropdown(false);
       }
-      if (priorityDropdownRef.current && !priorityDropdownRef.current.contains(event.target as Node)) {
+      if (priorityDropdownRef.current && !priorityDropdownRef.current.contains(target)) {
         setShowPriorityDropdown(false);
       }
     };
-    
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-  
+
   const handleSubmit = useCallback(async (e?: React.FormEvent) => {
     e?.preventDefault();
-    
+
     if (!title.trim()) {
       toastWarning('Please enter a task title');
       return;
     }
-    
+
     if (!effectiveProjectId) {
       toastWarning('Please select a project first');
       return;
     }
-    
+
     setIsLoading(true);
-    
     try {
       await createTask({
         title: title.trim(),
@@ -104,7 +106,7 @@ export function QuickAddTask({ className }: QuickAddTaskProps) {
         priority,
         due_date: dueDate || undefined,
       });
-      
+
       toastSuccess('Task created successfully');
       setTitle('');
       setDueDate('');
@@ -117,7 +119,7 @@ export function QuickAddTask({ className }: QuickAddTaskProps) {
       setIsLoading(false);
     }
   }, [title, effectiveProjectId, priority, dueDate, createTask, toastSuccess, toastError, toastWarning]);
-  
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -129,14 +131,12 @@ export function QuickAddTask({ className }: QuickAddTaskProps) {
       setShowPriorityDropdown(false);
     }
   };
-  
+
   return (
-    <div className={twMerge(clsx('relative', className))}>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-        {/* Main Input Row */}
-        <div className="flex items-center gap-2">
-          {/* Task Input */}
-          <div className="relative flex-1">
+    <div ref={quickAddRef} className={twMerge(clsx('relative', className))}>
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-2">
+          <div className="relative min-w-0">
             <input
               ref={inputRef}
               type="text"
@@ -160,8 +160,7 @@ export function QuickAddTask({ className }: QuickAddTaskProps) {
               aria-label="Quick add task"
             />
           </div>
-          
-          {/* Project Selector (Compact) */}
+
           <div className="relative" ref={projectDropdownRef}>
             <button
               type="button"
@@ -189,19 +188,14 @@ export function QuickAddTask({ className }: QuickAddTaskProps) {
                     style={{ backgroundColor: selectedProject.color }}
                     aria-hidden="true"
                   />
-                  <span className="hidden sm:inline max-w-[100px] truncate">
-                    {selectedProject.name}
-                  </span>
+                  <span className="hidden sm:inline max-w-[100px] truncate">{selectedProject.name}</span>
                 </>
               ) : (
                 <FolderOpen className="w-4 h-4" />
               )}
-              <ChevronDown className={twMerge(
-                clsx('w-3 h-3 transition-transform', showProjectDropdown && 'rotate-180')
-              )} />
+              <ChevronDown className={twMerge(clsx('w-3 h-3 transition-transform', showProjectDropdown && 'rotate-180'))} />
             </button>
-            
-            {/* Project Dropdown */}
+
             {showProjectDropdown && (
               <div
                 role="listbox"
@@ -217,9 +211,7 @@ export function QuickAddTask({ className }: QuickAddTaskProps) {
                 )}
               >
                 {projects.length === 0 ? (
-                  <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
-                    No projects available
-                  </div>
+                  <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">No projects available</div>
                 ) : (
                   projects.map((project) => (
                     <button
@@ -251,8 +243,7 @@ export function QuickAddTask({ className }: QuickAddTaskProps) {
               </div>
             )}
           </div>
-          
-          {/* Expand/Collapse Button */}
+
           <button
             type="button"
             onClick={() => setIsExpanded(!isExpanded)}
@@ -271,14 +262,9 @@ export function QuickAddTask({ className }: QuickAddTaskProps) {
             aria-label={isExpanded ? 'Collapse options' : 'Expand options'}
             aria-expanded={isExpanded}
           >
-            {isExpanded ? (
-              <ChevronUp className="w-4 h-4" />
-            ) : (
-              <ChevronDown className="w-4 h-4" />
-            )}
+            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
-          
-          {/* Add Button */}
+
           <button
             type="submit"
             disabled={isLoading || !title.trim()}
@@ -293,111 +279,111 @@ export function QuickAddTask({ className }: QuickAddTaskProps) {
             )}
             aria-label="Add task"
           >
-            {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Plus className="w-4 h-4" />
-            )}
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
           </button>
         </div>
-        
-        {/* Expanded Options Row */}
-        {isExpanded && (
-          <div className="flex items-center gap-2 pl-1">
-            {/* Priority Selector */}
-            <div className="relative" ref={priorityDropdownRef}>
-              <button
-                type="button"
-                onClick={() => setShowPriorityDropdown(!showPriorityDropdown)}
-                disabled={isLoading}
-                className={twMerge(
-                  clsx(
-                    'flex items-center gap-1.5 px-2 py-1.5 text-xs rounded-md',
-                    'bg-gray-100 dark:bg-gray-700',
-                    'text-gray-600 dark:text-gray-300',
-                    'hover:bg-gray-200 dark:hover:bg-gray-600',
-                    'disabled:opacity-50 disabled:cursor-not-allowed',
-                    'transition-colors duration-200'
-                  )
-                )}
-                aria-label="Select priority"
-                aria-expanded={showPriorityDropdown}
-                aria-haspopup="listbox"
-              >
-                <Flag className={twMerge('w-3.5 h-3.5', priorityConfig[priority].color)} />
-                <span>{priorityConfig[priority].label}</span>
-                <ChevronDown className={twMerge(
-                  clsx('w-3 h-3 transition-transform', showPriorityDropdown && 'rotate-180')
-                )} />
-              </button>
-              
-              {/* Priority Dropdown */}
-              {showPriorityDropdown && (
-                <div
-                  role="listbox"
-                  className={twMerge(
-                    clsx(
-                      'absolute top-full left-0 mt-1 z-50',
-                      'min-w-[120px]',
-                      'bg-white dark:bg-gray-800',
-                      'border border-gray-200 dark:border-gray-700',
-                      'rounded-lg shadow-lg',
-                      'py-1'
-                    )
-                  )}
-                >
-                  {(Object.keys(priorityConfig) as TaskPriority[]).map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      role="option"
-                      aria-selected={priority === p}
-                      onClick={() => {
-                        setPriority(p);
-                        setShowPriorityDropdown(false);
-                      }}
-                      className={twMerge(
-                        clsx(
-                          'w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left',
-                          'hover:bg-gray-100 dark:hover:bg-gray-700',
-                          priority === p && 'bg-blue-50 dark:bg-blue-900/30'
-                        )
-                      )}
-                    >
-                      <Flag className={twMerge('w-3.5 h-3.5', priorityConfig[p].color)} />
-                      <span>{priorityConfig[p].label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            
-            {/* Due Date Picker */}
-            <div className="flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-gray-400" />
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                disabled={isLoading}
-                className={twMerge(
-                  clsx(
-                    'px-2 py-1.5 text-xs rounded-md',
-                    'bg-gray-100 dark:bg-gray-700',
-                    'text-gray-600 dark:text-gray-300',
-                    'border-0',
-                    'focus:outline-none focus:ring-1 focus:ring-blue-500',
-                    'disabled:opacity-50 disabled:cursor-not-allowed',
-                    'transition-colors duration-200',
-                    '[color-scheme:light] dark:[color-scheme:dark]'
-                  )
-                )}
-                aria-label="Due date"
-              />
-            </div>
-          </div>
-        )}
       </form>
+
+      {isExpanded && (
+        <div
+          className={twMerge(
+            clsx(
+              'absolute top-full right-0 mt-2 z-50',
+              'flex items-center gap-2 px-2 py-1.5 rounded-lg border',
+              'bg-white dark:bg-gray-800',
+              'border-gray-200 dark:border-gray-700',
+              'shadow-lg'
+            )
+          )}
+        >
+          <div className="relative" ref={priorityDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setShowPriorityDropdown(!showPriorityDropdown)}
+              disabled={isLoading}
+              className={twMerge(
+                clsx(
+                  'flex items-center gap-1.5 px-2 py-1.5 text-xs rounded-md',
+                  'bg-gray-100 dark:bg-gray-700',
+                  'text-gray-600 dark:text-gray-300',
+                  'hover:bg-gray-200 dark:hover:bg-gray-600',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'transition-colors duration-200'
+                )
+              )}
+              aria-label="Select priority"
+              aria-expanded={showPriorityDropdown}
+              aria-haspopup="listbox"
+            >
+              <Flag className={twMerge('w-3.5 h-3.5', priorityConfig[priority].color)} />
+              <span>{priorityConfig[priority].label}</span>
+              <ChevronDown className={twMerge(clsx('w-3 h-3 transition-transform', showPriorityDropdown && 'rotate-180'))} />
+            </button>
+
+            {showPriorityDropdown && (
+              <div
+                role="listbox"
+                className={twMerge(
+                  clsx(
+                    'absolute top-full left-0 mt-1 z-50',
+                    'min-w-[120px]',
+                    'bg-white dark:bg-gray-800',
+                    'border border-gray-200 dark:border-gray-700',
+                    'rounded-lg shadow-lg',
+                    'py-1'
+                  )
+                )}
+              >
+                {(Object.keys(priorityConfig) as TaskPriority[]).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    role="option"
+                    aria-selected={priority === p}
+                    onClick={() => {
+                      setPriority(p);
+                      setShowPriorityDropdown(false);
+                    }}
+                    className={twMerge(
+                      clsx(
+                        'w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left',
+                        'hover:bg-gray-100 dark:hover:bg-gray-700',
+                        priority === p && 'bg-blue-50 dark:bg-blue-900/30'
+                      )
+                    )}
+                  >
+                    <Flag className={twMerge('w-3.5 h-3.5', priorityConfig[p].color)} />
+                    <span>{priorityConfig[p].label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-gray-400" />
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              disabled={isLoading}
+              className={twMerge(
+                clsx(
+                  'px-2 py-1.5 text-xs rounded-md',
+                  'bg-gray-100 dark:bg-gray-700',
+                  'text-gray-600 dark:text-gray-300',
+                  'border-0',
+                  'focus:outline-none focus:ring-1 focus:ring-blue-500',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'transition-colors duration-200',
+                  '[color-scheme:light] dark:[color-scheme:dark]'
+                )
+              )}
+              aria-label="Due date"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
