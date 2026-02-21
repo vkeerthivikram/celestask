@@ -32,6 +32,7 @@ interface FormData {
   priority: TaskPriority;
   due_date: string;
   start_date: string;
+  end_date: string;
   assignee_id: number | null;
   parent_task_id: number | null;
   progress_percent: number;
@@ -44,6 +45,7 @@ interface FormErrors {
   description?: string;
   due_date?: string;
   start_date?: string;
+  end_date?: string;
 }
 
 export function TaskForm({
@@ -98,6 +100,7 @@ export function TaskForm({
     priority: task?.priority || 'medium',
     due_date: task?.due_date ? task.due_date.split('T')[0] : '',
     start_date: task?.start_date ? task.start_date.split('T')[0] : '',
+    end_date: task?.end_date ? task.end_date.split('T')[0] : '',
     assignee_id: task?.assignee_id || null,
     parent_task_id: task?.parent_task_id || propParentTaskId || null,
     progress_percent: task?.progress_percent || 0,
@@ -125,6 +128,7 @@ export function TaskForm({
         priority: task.priority,
         due_date: task.due_date ? task.due_date.split('T')[0] : '',
         start_date: task.start_date ? task.start_date.split('T')[0] : '',
+        end_date: task.end_date ? task.end_date.split('T')[0] : '',
         assignee_id: task.assignee_id || null,
         parent_task_id: task.parent_task_id || propParentTaskId || null,
         progress_percent: task.progress_percent || 0,
@@ -195,6 +199,26 @@ export function TaskForm({
     }
     
     // Validate date range
+    if (formData.start_date && formData.end_date) {
+      const startDate = new Date(formData.start_date);
+      const endDate = new Date(formData.end_date);
+
+      if (startDate > endDate) {
+        newErrors.start_date = 'Start date cannot be after end date';
+        newErrors.end_date = 'End date cannot be before start date';
+      }
+    }
+
+    if (formData.end_date && formData.due_date) {
+      const endDate = new Date(formData.end_date);
+      const dueDate = new Date(formData.due_date);
+
+      if (endDate > dueDate) {
+        newErrors.end_date = 'End date cannot be after due date';
+        newErrors.due_date = 'Due date cannot be before end date';
+      }
+    }
+
     if (formData.start_date && formData.due_date) {
       const startDate = new Date(formData.start_date);
       const dueDate = new Date(formData.due_date);
@@ -222,6 +246,7 @@ export function TaskForm({
         priority: formData.priority,
         due_date: formData.due_date || null,
         start_date: formData.start_date || null,
+        end_date: formData.end_date || null,
         assignee_id: formData.assignee_id || undefined,
         parent_task_id: formData.parent_task_id || null,
         progress_percent: formData.progress_percent,
@@ -887,7 +912,7 @@ export function TaskForm({
       )}
       
       {/* Date Range */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Start Date */}
         <div>
           <label
@@ -918,6 +943,39 @@ export function TaskForm({
           />
           {errors.start_date && (
             <p className="mt-1 text-sm text-red-500 dark:text-red-400">{errors.start_date}</p>
+          )}
+        </div>
+
+        {/* End Date */}
+        <div>
+          <label
+            htmlFor="end_date"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >
+            <Calendar className="w-4 h-4 inline-block mr-1" />
+            End Date
+          </label>
+          <input
+            type="date"
+            id="end_date"
+            name="end_date"
+            value={formData.end_date}
+            onChange={handleInputChange}
+            className={twMerge(
+              clsx(
+                'w-full px-3 py-2 rounded-md border shadow-sm',
+                'bg:white dark:bg-gray-900',
+                'text-gray-900 dark:text-gray-100',
+                'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
+                errors.end_date
+                  ? 'border-red-500 dark:border-red-400'
+                  : 'border-gray-300 dark:border-gray-600'
+              )
+            )}
+            disabled={isLoading}
+          />
+          {errors.end_date && (
+            <p className="mt-1 text-sm text-red-500 dark:text-red-400">{errors.end_date}</p>
           )}
         </div>
         

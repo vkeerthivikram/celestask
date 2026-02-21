@@ -64,7 +64,8 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onCreateSubTa
     }
   };
 
-  const isOverdue = task.due_date && new Date(task.due_date) < new Date();
+  const displayDate = task.end_date || task.due_date;
+  const isOverdue = displayDate && new Date(displayDate) < new Date();
   
   // Get assignee info
   const primaryAssignee = task.assignee;
@@ -186,8 +187,8 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onCreateSubTa
           {/* Priority badge */}
           <PriorityBadge priority={task.priority} size="sm" />
 
-          {/* Due date */}
-          {task.due_date && (
+          {/* End/Due date */}
+          {displayDate && (
             <span
               className={clsx(
                 'inline-flex items-center gap-1 text-xs',
@@ -197,7 +198,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onCreateSubTa
               )}
             >
               <Calendar className="w-3 h-3" aria-hidden="true" />
-              {formatDate(task.due_date)}
+              {task.end_date ? 'End ' : ''}{formatDate(displayDate)}
             </span>
           )}
 

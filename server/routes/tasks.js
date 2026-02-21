@@ -142,7 +142,7 @@ router.post('/', (req, res) => {
   try {
     const { 
       project_id, title, description, status, priority, 
-      due_date, start_date, assignee_id, parent_task_id,
+      due_date, start_date, end_date, assignee_id, parent_task_id,
       progress_percent, estimated_duration_minutes, actual_duration_minutes
     } = req.body;
     
@@ -246,9 +246,9 @@ router.post('/', (req, res) => {
     const result = db.prepare(`
       INSERT INTO tasks (
         project_id, title, description, status, priority, 
-        due_date, start_date, assignee_id, parent_task_id,
+        due_date, start_date, end_date, assignee_id, parent_task_id,
         progress_percent, estimated_duration_minutes, actual_duration_minutes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       project_id, 
       title.trim(), 
@@ -257,6 +257,7 @@ router.post('/', (req, res) => {
       taskPriority, 
       due_date || null, 
       start_date || null,
+      end_date || null,
       assignee_id || null,
       parent_task_id || null,
       taskProgress,
@@ -285,7 +286,7 @@ router.put('/:id', (req, res) => {
     const { id } = req.params;
     const { 
       project_id, title, description, status, priority, 
-      due_date, start_date, assignee_id, parent_task_id,
+      due_date, start_date, end_date, assignee_id, parent_task_id,
       progress_percent, estimated_duration_minutes, actual_duration_minutes
     } = req.body;
     
@@ -397,6 +398,7 @@ router.put('/:id', (req, res) => {
           priority = COALESCE(?, priority), 
           due_date = COALESCE(?, due_date), 
           start_date = COALESCE(?, start_date), 
+          end_date = COALESCE(?, end_date), 
           assignee_id = COALESCE(?, assignee_id),
           parent_task_id = COALESCE(?, parent_task_id),
           progress_percent = COALESCE(?, progress_percent),
@@ -412,6 +414,7 @@ router.put('/:id', (req, res) => {
       priority !== undefined ? priority : null,
       due_date !== undefined ? (due_date || null) : null,
       start_date !== undefined ? (start_date || null) : null,
+      end_date !== undefined ? (end_date || null) : null,
       assignee_id !== undefined ? assignee_id : null,
       parent_task_id !== undefined ? parent_task_id : null,
       progress_percent !== undefined ? progress_percent : null,
@@ -689,7 +692,7 @@ router.post('/:parentId/subtasks', (req, res) => {
     const { parentId } = req.params;
     const { 
       title, description, status, priority, 
-      due_date, start_date, assignee_id,
+      due_date, start_date, end_date, assignee_id,
       progress_percent, estimated_duration_minutes
     } = req.body;
     
@@ -742,9 +745,9 @@ router.post('/:parentId/subtasks', (req, res) => {
     const result = db.prepare(`
       INSERT INTO tasks (
         project_id, title, description, status, priority, 
-        due_date, start_date, assignee_id, parent_task_id,
+        due_date, start_date, end_date, assignee_id, parent_task_id,
         progress_percent, estimated_duration_minutes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       parentTask.project_id, 
       title.trim(), 
@@ -753,6 +756,7 @@ router.post('/:parentId/subtasks', (req, res) => {
       taskPriority, 
       due_date || null, 
       start_date || null,
+      end_date || null,
       assignee_id || null,
       parentId,
       progress_percent || 0,

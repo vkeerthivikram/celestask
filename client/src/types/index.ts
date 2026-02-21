@@ -88,6 +88,7 @@ export interface Task {
   priority: TaskPriority;
   due_date: string | null;
   start_date: string | null;
+  end_date?: string | null;
   assignee_id?: number;
   assignee?: Person;
   coAssignees?: TaskAssignee[];
@@ -177,6 +178,7 @@ export interface CreateTaskDTO {
   priority?: TaskPriority;
   due_date?: string | null;
   start_date?: string | null;
+  end_date?: string | null;
   assignee_id?: number;
   parent_task_id?: number | null;
   progress_percent?: number;
@@ -191,6 +193,7 @@ export interface UpdateTaskDTO {
   priority?: TaskPriority;
   due_date?: string | null;
   start_date?: string | null;
+  end_date?: string | null;
   assignee_id?: number;
   parent_task_id?: number | null;
   progress_percent?: number;

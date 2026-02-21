@@ -24,6 +24,7 @@ function createTables() {
       priority TEXT DEFAULT 'medium',
       due_date DATE,
       start_date DATE,
+      end_date DATE,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -175,6 +176,13 @@ function createTables() {
     if (!hasActualDuration) {
       db.exec(`ALTER TABLE tasks ADD COLUMN actual_duration_minutes INTEGER`);
       console.log('Added actual_duration_minutes column to tasks table');
+    }
+
+    // Add end_date for task scheduling
+    const hasEndDate = taskTableInfo.some(col => col.name === 'end_date');
+    if (!hasEndDate) {
+      db.exec(`ALTER TABLE tasks ADD COLUMN end_date DATE`);
+      console.log('Added end_date column to tasks table');
     }
   } catch (error) {
     console.error('Error adding v1.2.0 task columns:', error.message);

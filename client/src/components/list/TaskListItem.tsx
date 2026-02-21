@@ -17,6 +17,8 @@ interface TaskListItemProps {
 }
 
 export function TaskListItem({ task, onEdit, onDelete, onCreateSubTask, isOverdue }: TaskListItemProps) {
+  const displayDate = task.end_date || task.due_date;
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
     const date = new Date(dateString);
@@ -78,7 +80,7 @@ export function TaskListItem({ task, onEdit, onDelete, onCreateSubTask, isOverdu
       onKeyDown={handleKeyDown}
       tabIndex={0}
       role="button"
-      aria-label={`Task: ${task.title}. Status: ${task.status}. Priority: ${task.priority}. Due: ${formatDate(task.due_date)}`}
+      aria-label={`Task: ${task.title}. Status: ${task.status}. Priority: ${task.priority}. Date: ${formatDate(displayDate)}`}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
@@ -111,7 +113,7 @@ export function TaskListItem({ task, onEdit, onDelete, onCreateSubTask, isOverdu
         <StatusBadge status={task.status} size="sm" />
         <PriorityBadge priority={task.priority} size="sm" />
 
-        {task.due_date && (
+        {displayDate && (
           <div
             className={clsx(
               'flex items-center gap-1 text-xs',
@@ -125,7 +127,7 @@ export function TaskListItem({ task, onEdit, onDelete, onCreateSubTask, isOverdu
             ) : (
               <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
             )}
-            <span>{formatDate(task.due_date)}</span>
+            <span>{task.end_date ? 'End ' : ''}{formatDate(displayDate)}</span>
           </div>
         )}
       </div>

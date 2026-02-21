@@ -146,8 +146,9 @@ export function ListView() {
 
   // Check if task is overdue
   const isTaskOverdue = useCallback((task: Task): boolean => {
-    if (!task.due_date || task.status === 'done') return false;
-    const dueDate = new Date(task.due_date);
+    const targetDate = task.end_date || task.due_date;
+    if (!targetDate || task.status === 'done') return false;
+    const dueDate = new Date(targetDate);
     const now = new Date();
     dueDate.setHours(23, 59, 59, 999);
     return dueDate < now;

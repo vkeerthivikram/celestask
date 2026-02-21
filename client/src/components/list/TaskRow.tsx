@@ -44,6 +44,8 @@ export function TaskRow({
   isSelected = false,
   onToggleSelection,
 }: TaskRowProps) {
+  const displayDate = task.end_date || task.due_date;
+
   const [isHovered, setIsHovered] = useState(false);
   const [editingField, setEditingField] = useState<'status' | 'priority' | 'progress' | 'title' | null>(null);
   const [editValue, setEditValue] = useState<string | number>('');
@@ -557,7 +559,7 @@ export function TaskRow({
               aria-hidden="true"
             />
           )}
-          {task.due_date && (
+          {displayDate && (
             <Calendar
               className={clsx(
                 'w-4 h-4 flex-shrink-0',
@@ -578,7 +580,7 @@ export function TaskRow({
               )
             )}
           >
-            {formatDate(task.due_date)}
+            {displayDate ? `${task.end_date ? 'End ' : ''}${formatDate(displayDate)}` : '-'}
           </span>
         </div>
       </td>
