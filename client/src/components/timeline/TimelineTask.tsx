@@ -1,16 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import type { Task, TaskStatus, TaskPriority } from '../../types';
 import { STATUS_CONFIG, PRIORITY_CONFIG } from '../../types';
+import { AppContextMenu } from '../common/AppContextMenu';
 
 interface TimelineTaskProps {
   task: Task;
   left: number;
   width: number;
   onClick?: (task: Task) => void;
+  onCreateSubTask?: (parentTaskId: number) => void;
+  onDelete?: (task: Task) => void;
 }
 
 // Get status color for task bar
@@ -37,13 +40,53 @@ const getStatusBorderClass = (status: TaskStatus): string => {
   return colorMap[status];
 };
 
-export function TimelineTask({ task, left, width, onClick }: TimelineTaskProps) {
+export function TimelineTask({ task, left, width, onClick, onCreateSubTask, onDelete }: TimelineTaskProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onClick?.(task);
   };
+
+  const handleContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenuPosition({ x: event.clientX, y: event.clientY });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenuPosition(null);
+  };
+
+  const contextMenuItems = useMemo(() => {
+    const items = [
+      {
+        id: 'open-task',
+        label: 'Open task',
+        onSelect: () => onClick?.(task),
+      },
+    ];
+
+    if (onCreateSubTask) {
+      items.push({
+        id: 'create-sub-task',
+        label: 'Add sub-task',
+        onSelect: () => onCreateSubTask(task.id),
+      });
+    }
+
+    if (onDelete) {
+      items.push({
+        id: 'delete-task',
+        label: 'Delete task',
+        onSelect: () => onDelete(task),
+        danger: true,
+      });
+    }
+
+    return items;
+  }, [onClick, onCreateSubTask, onDelete, task]);
 
   // Calculate progress if task is in progress
   const getProgress = (): number | null => {
@@ -66,6 +109,7 @@ export function TimelineTask({ task, left, width, onClick }: TimelineTaskProps) 
   const progress = getProgress();
 
   return (
+    <>
     <div
       className="relative my-1"
       style={{
@@ -75,10 +119,18 @@ export function TimelineTask({ task, left, width, onClick }: TimelineTaskProps) 
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onContextMenu={handleContextMenu}
     >
       {/* Task Bar */}
       <button
         onClick={handleClick}
+        onKeyDown={(event) => {
+          if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+            event.preventDefault();
+            const rect = (event.currentTarget as HTMLButtonElement).getBoundingClientRect();
+            setContextMenuPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+          }
+        }}
         className={twMerge(
           clsx(
             'w-full h-8 rounded-md border-l-2 transition-all duration-150',
@@ -154,6 +206,14 @@ export function TimelineTask({ task, left, width, onClick }: TimelineTaskProps) 
         </div>
       )}
     </div>
+    <AppContextMenu
+      open={Boolean(contextMenuPosition)}
+      x={contextMenuPosition?.x ?? 0}
+      y={contextMenuPosition?.y ?? 0}
+      items={contextMenuItems}
+      onClose={closeContextMenu}
+    />
+    </>
   );
 }
 

@@ -32,7 +32,7 @@ const columns: Array<{ id: TaskStatus; title: string; color: string }> = [
 ];
 
 export const KanbanBoard: React.FC = () => {
-  const { filteredTasks, updateTaskStatus } = useTasks();
+  const { filteredTasks, updateTaskStatus, deleteTask } = useTasks();
   const { openTaskModal, openSubTaskModal } = useApp();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [overColumnId, setOverColumnId] = useState<TaskStatus | null>(null);
@@ -136,6 +136,19 @@ export const KanbanBoard: React.FC = () => {
     openSubTaskModal(parentTaskId);
   };
 
+  const handleDeleteTask = async (task: Task) => {
+    const shouldDelete = window.confirm(`Delete task "${task.title}"? This cannot be undone.`);
+    if (!shouldDelete) {
+      return;
+    }
+
+    try {
+      await deleteTask(task.id);
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+    }
+  };
+
   return (
     <div className="h-full w-full overflow-hidden">
       <DndContext
@@ -167,6 +180,7 @@ export const KanbanBoard: React.FC = () => {
               projectColor={column.color}
               onTaskClick={handleTaskClick}
               onCreateSubTask={handleCreateSubTask}
+              onDeleteTask={handleDeleteTask}
             />
           ))}
         </div>
@@ -175,7 +189,7 @@ export const KanbanBoard: React.FC = () => {
         <DragOverlay>
           {activeTask ? (
             <div className="rotate-[3deg] shadow-2xl">
-              <TaskCard task={activeTask} onClick={() => {}} />
+              <TaskCard task={activeTask} onClick={() => {}} onDelete={handleDeleteTask} />
             </div>
           ) : null}
         </DragOverlay>

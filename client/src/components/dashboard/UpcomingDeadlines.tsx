@@ -7,10 +7,13 @@ import { format, differenceInDays, isPast, isToday, isTomorrow } from 'date-fns'
 import { Calendar, AlertCircle, CheckCircle } from 'lucide-react';
 import type { Task } from '../../types';
 import { PRIORITY_CONFIG, STATUS_CONFIG } from '../../types';
+import { AppContextMenu } from '../common/AppContextMenu';
 
 interface UpcomingDeadlinesProps {
   tasks: Task[];
   onTaskClick?: (task: Task) => void;
+  onCreateSubTask?: (parentTaskId: number) => void;
+  onDeleteTask?: (task: Task) => void;
   maxItems?: number;
 }
 
@@ -60,7 +63,9 @@ const getUrgencyInfo = (dueDate: Date): { label: string; color: string; icon: Re
   };
 };
 
-export function UpcomingDeadlines({ tasks, onTaskClick, maxItems = 5 }: UpcomingDeadlinesProps) {
+export function UpcomingDeadlines({ tasks, onTaskClick, onCreateSubTask, onDeleteTask, maxItems = 5 }: UpcomingDeadlinesProps) {
+  const [contextMenuState, setContextMenuState] = React.useState<{ x: number; y: number; task: Task } | null>(null);
+
   // Sort tasks by due date and filter for upcoming ones
   const sortedTasks = React.useMemo(() => {
     const today = new Date();
@@ -75,6 +80,44 @@ export function UpcomingDeadlines({ tasks, onTaskClick, maxItems = 5 }: Upcoming
       })
       .slice(0, maxItems);
   }, [tasks, maxItems]);
+
+  const closeContextMenu = React.useCallback(() => {
+    setContextMenuState(null);
+  }, []);
+
+  const contextMenuItems = React.useMemo(() => {
+    if (!contextMenuState) {
+      return [];
+    }
+
+    const { task } = contextMenuState;
+    const items = [
+      {
+        id: 'open-task',
+        label: 'Open task',
+        onSelect: () => onTaskClick?.(task),
+      },
+    ];
+
+    if (onCreateSubTask) {
+      items.push({
+        id: 'create-sub-task',
+        label: 'Add sub-task',
+        onSelect: () => onCreateSubTask(task.id),
+      });
+    }
+
+    if (onDeleteTask) {
+      items.push({
+        id: 'delete-task',
+        label: 'Delete task',
+        onSelect: () => onDeleteTask(task),
+        danger: true,
+      });
+    }
+
+    return items;
+  }, [contextMenuState, onCreateSubTask, onDeleteTask, onTaskClick]);
 
   if (sortedTasks.length === 0) {
     return (
@@ -91,6 +134,7 @@ export function UpcomingDeadlines({ tasks, onTaskClick, maxItems = 5 }: Upcoming
   }
 
   return (
+    <>
     <div className="space-y-3">
       {sortedTasks.map((task) => {
         const dueDate = new Date(task.due_date!);
@@ -101,6 +145,17 @@ export function UpcomingDeadlines({ tasks, onTaskClick, maxItems = 5 }: Upcoming
           <button
             key={task.id}
             onClick={() => onTaskClick?.(task)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setContextMenuState({ x: event.clientX, y: event.clientY, task });
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                event.preventDefault();
+                const rect = (event.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                setContextMenuState({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, task });
+              }
+            }}
             className={twMerge(
               clsx(
                 'w-full text-left p-3 rounded-lg border',
@@ -147,6 +202,14 @@ export function UpcomingDeadlines({ tasks, onTaskClick, maxItems = 5 }: Upcoming
         );
       })}
     </div>
+    <AppContextMenu
+      open={Boolean(contextMenuState)}
+      x={contextMenuState?.x ?? 0}
+      y={contextMenuState?.y ?? 0}
+      items={contextMenuItems}
+      onClose={closeContextMenu}
+    />
+    </>
   );
 }
 

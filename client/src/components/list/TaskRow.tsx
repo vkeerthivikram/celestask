@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Pencil, Trash2, Calendar, AlertCircle, Users, GitBranch, Check, Loader2, Plus } from 'lucide-react';
@@ -9,6 +9,7 @@ import { StatusBadge, PriorityBadge, TagBadge } from '../common/Badge';
 import { Button } from '../common/Button';
 import { MiniProgressBar } from '../common/ProgressBar';
 import { useTasks } from '../../context/TaskContext';
+import { AppContextMenu } from '../common/AppContextMenu';
 
 interface TaskRowProps {
   task: Task;
@@ -52,6 +53,7 @@ export function TaskRow({
   const [isSaving, setIsSaving] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   
   const { updateTaskStatus, updateTask, updateTaskProgress } = useTasks();
   
@@ -109,6 +111,12 @@ export function TaskRow({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (editingField) return;
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault();
+      const rect = (e.currentTarget as HTMLTableRowElement).getBoundingClientRect();
+      setContextMenuPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      return;
+    }
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       onEdit(task);
@@ -129,6 +137,45 @@ export function TaskRow({
     e.stopPropagation();
     onCreateSubTask?.(task.id);
   };
+
+  const handleContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    setShowStatusDropdown(false);
+    setShowPriorityDropdown(false);
+    setEditingField(null);
+    setContextMenuPosition({ x: event.clientX, y: event.clientY });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenuPosition(null);
+  };
+
+  const contextMenuItems = useMemo(() => {
+    const items = [
+      {
+        id: 'edit-task',
+        label: 'Edit task',
+        onSelect: () => onEdit(task),
+      },
+    ];
+
+    if (onCreateSubTask) {
+      items.push({
+        id: 'create-sub-task',
+        label: 'Add sub-task',
+        onSelect: () => onCreateSubTask(task.id),
+      });
+    }
+
+    items.push({
+      id: 'delete-task',
+      label: 'Delete task',
+      onSelect: () => onDelete(task),
+      danger: true,
+    });
+
+    return items;
+  }, [onCreateSubTask, onDelete, onEdit, task]);
   
   // Checkbox selection
   const handleCheckboxClick = (e: React.MouseEvent) => {
@@ -265,6 +312,7 @@ export function TaskRow({
   const isSubtask = task.parent_task_id !== undefined && task.parent_task_id !== null;
 
   return (
+    <>
     <tr
       className={twMerge(
         clsx(
@@ -280,6 +328,7 @@ export function TaskRow({
       onKeyDown={handleKeyDown}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onContextMenu={handleContextMenu}
       tabIndex={0}
       role="row"
       aria-label={`Task: ${task.title}`}
@@ -625,6 +674,14 @@ export function TaskRow({
         </div>
       </td>
     </tr>
+    <AppContextMenu
+      open={Boolean(contextMenuPosition)}
+      x={contextMenuPosition?.x ?? 0}
+      y={contextMenuPosition?.y ?? 0}
+      items={contextMenuItems}
+      onClose={closeContextMenu}
+    />
+    </>
   );
 }
 

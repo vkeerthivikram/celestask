@@ -29,6 +29,7 @@ import {
 } from 'recharts';
 import { useTasks } from '../../context/TaskContext';
 import { useProjects } from '../../context/ProjectContext';
+import { useApp } from '../../context/AppContext';
 import type { Task, TaskStatus, TaskPriority, CreateTaskDTO, UpdateTaskDTO } from '../../types';
 import { STATUS_CONFIG, PRIORITY_CONFIG } from '../../types';
 import { Modal } from '../common/Modal';
@@ -36,6 +37,7 @@ import { TaskForm } from '../common/TaskForm';
 import { Card } from '../common/Card';
 import StatCard from './StatCard';
 import UpcomingDeadlines from './UpcomingDeadlines';
+import { AppContextMenu } from '../common/AppContextMenu';
 
 // Chart colors
 const CHART_COLORS = {
@@ -51,11 +53,13 @@ const CHART_COLORS = {
 };
 
 export function DashboardView() {
-  const { tasks, createTask, updateTask } = useTasks();
+  const { tasks, createTask, updateTask, deleteTask } = useTasks();
   const { currentProject } = useProjects();
+  const { openSubTaskModal } = useApp();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [contextMenuState, setContextMenuState] = useState<{ x: number; y: number; task: Task } | null>(null);
 
   // Calculate statistics
   const stats = useMemo(() => {
@@ -161,6 +165,55 @@ export function DashboardView() {
     setSelectedTask(task);
     setIsModalOpen(true);
   }, []);
+
+  const handleCreateSubTask = useCallback((parentTaskId: number) => {
+    openSubTaskModal(parentTaskId);
+  }, [openSubTaskModal]);
+
+  const handleDeleteTask = useCallback(async (task: Task) => {
+    const shouldDelete = window.confirm(`Delete task "${task.title}"? This cannot be undone.`);
+    if (!shouldDelete) {
+      return;
+    }
+
+    try {
+      await deleteTask(task.id);
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+    }
+  }, [deleteTask]);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenuState(null);
+  }, []);
+
+  const contextMenuItems = useMemo(() => {
+    if (!contextMenuState) {
+      return [];
+    }
+
+    const { task } = contextMenuState;
+    return [
+      {
+        id: 'open-task',
+        label: 'Open task',
+        onSelect: () => handleTaskClick(task),
+      },
+      {
+        id: 'create-sub-task',
+        label: 'Add sub-task',
+        onSelect: () => handleCreateSubTask(task.id),
+      },
+      {
+        id: 'delete-task',
+        label: 'Delete task',
+        onSelect: () => {
+          void handleDeleteTask(task);
+        },
+        danger: true,
+      },
+    ];
+  }, [contextMenuState, handleCreateSubTask, handleDeleteTask, handleTaskClick]);
 
   // Handle modal close
   const handleCloseModal = useCallback(() => {
@@ -373,6 +426,8 @@ export function DashboardView() {
           <UpcomingDeadlines
             tasks={tasks}
             onTaskClick={handleTaskClick}
+            onCreateSubTask={handleCreateSubTask}
+            onDeleteTask={handleDeleteTask}
             maxItems={5}
           />
         </Card>
@@ -398,6 +453,17 @@ export function DashboardView() {
                 <button
                   key={task.id}
                   onClick={() => handleTaskClick(task)}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setContextMenuState({ x: event.clientX, y: event.clientY, task });
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                      event.preventDefault();
+                      const rect = (event.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                      setContextMenuState({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, task });
+                    }
+                  }}
                   className={twMerge(
                     clsx(
                       'w-full text-left p-3 rounded-lg',
@@ -433,6 +499,14 @@ export function DashboardView() {
           )}
         </Card>
       </div>
+
+      <AppContextMenu
+        open={Boolean(contextMenuState)}
+        x={contextMenuState?.x ?? 0}
+        y={contextMenuState?.y ?? 0}
+        items={contextMenuItems}
+        onClose={closeContextMenu}
+      />
 
       {/* Task Modal */}
       <Modal

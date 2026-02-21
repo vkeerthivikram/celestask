@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { clsx } from 'clsx';
@@ -10,11 +10,13 @@ import { Calendar, Users, GitBranch, Plus } from 'lucide-react';
 import type { Task, TaskPriority } from '../../types';
 import { PriorityBadge, TagBadge } from '../common/Badge';
 import { MiniProgressBar } from '../common/ProgressBar';
+import { AppContextMenu } from '../common/AppContextMenu';
 
 interface TaskCardProps {
   task: Task;
   onClick?: (task: Task) => void;
   onCreateSubTask?: (parentTaskId: number) => void;
+  onDelete?: (task: Task) => void;
 }
 
 const priorityColors: Record<TaskPriority, string> = {
@@ -24,7 +26,8 @@ const priorityColors: Record<TaskPriority, string> = {
   urgent: 'bg-red-500',
 };
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onCreateSubTask }) => {
+export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onCreateSubTask, onDelete }) => {
+  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const {
     attributes,
     listeners,
@@ -50,11 +53,55 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onCreateSubTa
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault();
+      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+      setContextMenuPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      return;
+    }
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       onClick?.(task);
     }
   };
+
+  const handleContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    setContextMenuPosition({ x: event.clientX, y: event.clientY });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenuPosition(null);
+  };
+
+  const contextMenuItems = useMemo(() => {
+    const items = [
+      {
+        id: 'open-task',
+        label: 'Open task',
+        onSelect: () => onClick?.(task),
+      },
+    ];
+
+    if (onCreateSubTask) {
+      items.push({
+        id: 'create-sub-task',
+        label: 'Add sub-task',
+        onSelect: () => onCreateSubTask(task.id),
+      });
+    }
+
+    if (onDelete) {
+      items.push({
+        id: 'delete-task',
+        label: 'Delete task',
+        onSelect: () => onDelete(task),
+        danger: true,
+      });
+    }
+
+    return items;
+  }, [onClick, onCreateSubTask, onDelete, task]);
 
   const formatDate = (dateString: string) => {
     try {
@@ -83,12 +130,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onCreateSubTa
   const isSubtask = task.parent_task_id !== undefined && task.parent_task_id !== null;
 
   return (
+    <>
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
       onClick={handleClick}
+      onContextMenu={handleContextMenu}
       onKeyDown={handleKeyDown}
       tabIndex={0}
       role="button"
@@ -232,6 +281,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onCreateSubTa
         </div>
       </div>
     </div>
+    <AppContextMenu
+      open={Boolean(contextMenuPosition)}
+      x={contextMenuPosition?.x ?? 0}
+      y={contextMenuPosition?.y ?? 0}
+      items={contextMenuItems}
+      onClose={closeContextMenu}
+    />
+    </>
   );
 };
 

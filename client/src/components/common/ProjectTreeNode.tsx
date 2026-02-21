@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import type { TreeNode } from '../../types';
 import type { Project } from '../../types';
 import { TreeNodeRenderer } from './TreeView';
+import { AppContextMenu } from './AppContextMenu';
 
 interface ProjectTreeNodeProps {
   node: TreeNode<Project>;
@@ -30,6 +31,7 @@ export function ProjectTreeNode({
 }: ProjectTreeNodeProps) {
   const project = node.data;
   const hasChildren = node.children.length > 0;
+  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   
   // Get owner display info
   const owner = project.owner;
@@ -37,8 +39,54 @@ export function ProjectTreeNode({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    // Context menu could be implemented here
+    setContextMenuPosition({ x: e.clientX, y: e.clientY });
   };
+
+  const handleKeyboardContextMenu = (element: HTMLDivElement) => {
+    const rect = element.getBoundingClientRect();
+    setContextMenuPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenuPosition(null);
+  };
+
+  const contextMenuItems = useMemo(() => {
+    const items = [
+      {
+        id: 'open-project',
+        label: 'Open project',
+        onSelect: () => onSelect(project),
+      },
+    ];
+
+    if (onCreateSubProject) {
+      items.push({
+        id: 'create-sub-project',
+        label: 'Add sub-project',
+        onSelect: () => onCreateSubProject(project.id),
+      });
+    }
+
+    if (onEditProject) {
+      items.push({
+        id: 'edit-project',
+        label: 'Edit project',
+        onSelect: () => onEditProject(project),
+      });
+    }
+
+    if (onDeleteProject) {
+      items.push({
+        id: 'delete-project',
+        label: 'Delete project',
+        onSelect: () => onDeleteProject(project),
+        danger: true,
+      });
+    }
+
+    return items;
+  }, [onCreateSubProject, onDeleteProject, onEditProject, onSelect, project]);
 
   const actions = (
     <>
@@ -113,17 +161,28 @@ export function ProjectTreeNode({
   );
 
   return (
-    <TreeNodeRenderer
-      depth={depth}
-      isExpanded={isExpanded}
-      hasChildren={hasChildren}
-      onToggle={onToggle}
-      label={labelContent}
-      color={project.color}
-      isSelected={isSelected}
-      onClick={() => onSelect(project)}
-      actions={actions}
-    />
+    <>
+      <TreeNodeRenderer
+        depth={depth}
+        isExpanded={isExpanded}
+        hasChildren={hasChildren}
+        onToggle={onToggle}
+        label={labelContent}
+        color={project.color}
+        isSelected={isSelected}
+        onClick={() => onSelect(project)}
+        onContextMenu={handleContextMenu}
+        onKeyboardContextMenu={handleKeyboardContextMenu}
+        actions={actions}
+      />
+      <AppContextMenu
+        open={Boolean(contextMenuPosition)}
+        x={contextMenuPosition?.x ?? 0}
+        y={contextMenuPosition?.y ?? 0}
+        items={contextMenuItems}
+        onClose={closeContextMenu}
+      />
+    </>
   );
 }
 

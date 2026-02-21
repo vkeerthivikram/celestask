@@ -10,6 +10,7 @@ import type { Person, CreatePersonDTO, UpdatePersonDTO } from '../../types';
 import { Modal, ConfirmModal } from '../common/Modal';
 import { PersonForm } from '../common/PersonForm';
 import { Button } from '../common/Button';
+import { AppContextMenu } from '../common/AppContextMenu';
 
 export function PeopleView() {
   const { people, loading, error, createPerson, updatePerson, deletePerson } = usePeople();
@@ -311,9 +312,46 @@ interface PersonCardProps {
 
 function PersonCard({ person, projectName, projectColor, onEdit, onDelete }: PersonCardProps) {
   const [showMenu, setShowMenu] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+
+  const closeContextMenu = () => {
+    setContextMenuPosition(null);
+  };
+
+  const contextMenuItems = [
+    {
+      id: 'edit-person',
+      label: 'Edit person',
+      onSelect: onEdit,
+    },
+    {
+      id: 'delete-person',
+      label: 'Delete person',
+      onSelect: onDelete,
+      danger: true,
+    },
+  ];
   
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow">
+    <>
+    <div
+      className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow"
+      onContextMenu={(event) => {
+        event.preventDefault();
+        setShowMenu(false);
+        setContextMenuPosition({ x: event.clientX, y: event.clientY });
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+          event.preventDefault();
+          const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+          setShowMenu(false);
+          setContextMenuPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+        }
+      }}
+      tabIndex={0}
+      role="group"
+    >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           {/* Avatar */}
@@ -417,6 +455,14 @@ function PersonCard({ person, projectName, projectColor, onEdit, onDelete }: Per
         </div>
       </div>
     </div>
+    <AppContextMenu
+      open={Boolean(contextMenuPosition)}
+      x={contextMenuPosition?.x ?? 0}
+      y={contextMenuPosition?.y ?? 0}
+      items={contextMenuItems}
+      onClose={closeContextMenu}
+    />
+    </>
   );
 }
 

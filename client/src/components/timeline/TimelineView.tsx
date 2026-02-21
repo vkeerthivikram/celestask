@@ -7,6 +7,7 @@ import { format, addDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addM
 import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTasks } from '../../context/TaskContext';
 import { useProjects } from '../../context/ProjectContext';
+import { useApp } from '../../context/AppContext';
 import type { Task, TaskStatus, CreateTaskDTO, UpdateTaskDTO } from '../../types';
 import { STATUS_CONFIG } from '../../types';
 import { Modal } from '../common/Modal';
@@ -26,8 +27,9 @@ interface TimelineData {
 }
 
 export function TimelineView() {
-  const { tasks, createTask, updateTask } = useTasks();
+  const { tasks, createTask, updateTask, deleteTask } = useTasks();
   const { currentProject } = useProjects();
+  const { openSubTaskModal } = useApp();
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -149,6 +151,23 @@ export function TimelineView() {
     setSelectedTask(task);
     setIsModalOpen(true);
   }, []);
+
+  const handleCreateSubTask = useCallback((parentTaskId: number) => {
+    openSubTaskModal(parentTaskId);
+  }, [openSubTaskModal]);
+
+  const handleDeleteTask = useCallback(async (task: Task) => {
+    const shouldDelete = window.confirm(`Delete task "${task.title}"? This cannot be undone.`);
+    if (!shouldDelete) {
+      return;
+    }
+
+    try {
+      await deleteTask(task.id);
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+    }
+  }, [deleteTask]);
 
   // Handle modal close
   const handleCloseModal = useCallback(() => {
@@ -419,6 +438,8 @@ export function TimelineView() {
                     left={item.left}
                     width={item.width}
                     onClick={handleTaskClick}
+                    onCreateSubTask={handleCreateSubTask}
+                    onDelete={handleDeleteTask}
                   />
                 ))}
               </div>

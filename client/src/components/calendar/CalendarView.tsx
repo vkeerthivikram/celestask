@@ -8,6 +8,7 @@ import { twMerge } from 'tailwind-merge';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useTasks } from '../../context/TaskContext';
 import { useProjects } from '../../context/ProjectContext';
+import { useApp } from '../../context/AppContext';
 import type { Task, CalendarEvent, TaskPriority } from '../../types';
 import { PRIORITY_CONFIG } from '../../types';
 import { Modal } from '../common/Modal';
@@ -30,8 +31,9 @@ const priorityColors: Record<TaskPriority, string> = {
 };
 
 export function CalendarView() {
-  const { tasks, createTask, updateTask } = useTasks();
+  const { tasks, createTask, updateTask, deleteTask } = useTasks();
   const { currentProject } = useProjects();
+  const { openSubTaskModal } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<View>(Views.MONTH);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -128,12 +130,34 @@ export function CalendarView() {
     [selectedTask, createTask, updateTask, handleCloseModal]
   );
 
+  const handleCreateSubTask = useCallback((parentTaskId: number) => {
+    openSubTaskModal(parentTaskId);
+  }, [openSubTaskModal]);
+
+  const handleDeleteTask = useCallback(async (task: Task) => {
+    const shouldDelete = window.confirm(`Delete task "${task.title}"? This cannot be undone.`);
+    if (!shouldDelete) {
+      return;
+    }
+
+    try {
+      await deleteTask(task.id);
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+    }
+  }, [deleteTask]);
+
   // Custom event component
   const EventComponent = useCallback(
     ({ event }: { event: CalendarEvent }) => (
-      <TaskEvent task={event.resource} onClick={() => handleSelectEvent(event)} />
+      <TaskEvent
+        task={event.resource}
+        onClick={() => handleSelectEvent(event)}
+        onCreateSubTask={handleCreateSubTask}
+        onDelete={handleDeleteTask}
+      />
     ),
-    [handleSelectEvent]
+    [handleCreateSubTask, handleDeleteTask, handleSelectEvent]
   );
 
   // Event style getter

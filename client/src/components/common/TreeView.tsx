@@ -102,6 +102,8 @@ interface TreeNodeRendererProps {
   actions?: ReactNode;
   isSelected?: boolean;
   onClick?: () => void;
+  onContextMenu?: (event: React.MouseEvent) => void;
+  onKeyboardContextMenu?: (element: HTMLDivElement) => void;
   color?: string;
   className?: string;
 }
@@ -116,6 +118,8 @@ export function TreeNodeRenderer({
   actions,
   isSelected = false,
   onClick,
+  onContextMenu,
+  onKeyboardContextMenu,
   color,
   className = '',
 }: TreeNodeRendererProps) {
@@ -133,6 +137,9 @@ export function TreeNodeRenderer({
       onToggle();
     } else if (e.key === 'ArrowLeft' && hasChildren && isExpanded) {
       onToggle();
+    } else if ((e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && onKeyboardContextMenu) {
+      e.preventDefault();
+      onKeyboardContextMenu(e.currentTarget as HTMLDivElement);
     }
   };
 
@@ -150,6 +157,7 @@ export function TreeNodeRenderer({
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onClick={onClick}
+      onContextMenu={onContextMenu}
     >
       {/* Expand/Collapse Button */}
       <button

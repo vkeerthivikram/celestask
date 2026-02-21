@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useParams, usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useProjects } from '../../context/ProjectContext';
-import type { ViewType } from '../../types';
+import type { Project, ViewType } from '../../types';
+import { AppContextMenu } from '../common/AppContextMenu';
 
 interface SidebarProps {
   onAddProject?: () => void;
@@ -36,9 +37,10 @@ export function Sidebar({ onAddProject }: SidebarProps) {
   const projectId = params?.projectId;
   const router = useRouter();
   const pathname = usePathname();
-  const { sidebarOpen, setSidebarOpen, currentView, setCurrentView, setCurrentProjectId, openSubProjectModal } = useApp();
-  const { projects, currentProject, setCurrentProject } = useProjects();
+  const { sidebarOpen, setSidebarOpen, currentView, setCurrentView, setCurrentProjectId, openSubProjectModal, openProjectModal } = useApp();
+  const { projects, currentProject, setCurrentProject, deleteProject } = useProjects();
   const sidebarRef = useRef<HTMLElement>(null);
+  const [contextMenuState, setContextMenuState] = useState<{ x: number; y: number; project: Project } | null>(null);
   
   // Update current project based on URL
   useEffect(() => {
@@ -51,7 +53,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
   }, [projectId, setCurrentProjectId]);
   
   // Handle project click
-  const handleProjectClick = (project: typeof projects[0]) => {
+  const handleProjectClick = (project: Project) => {
     setCurrentProject(project);
     setCurrentProjectId(project.id);
     router.push(`/projects/${project.id}/${currentView}`);
@@ -60,6 +62,59 @@ export function Sidebar({ onAddProject }: SidebarProps) {
       setSidebarOpen(false);
     }
   };
+
+  const handleProjectContextMenu = (event: React.MouseEvent, project: Project) => {
+    event.preventDefault();
+    setCurrentProject(project);
+    setCurrentProjectId(project.id);
+    setContextMenuState({ x: event.clientX, y: event.clientY, project });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenuState(null);
+  };
+
+  const handleDeleteProject = async (project: Project) => {
+    const shouldDelete = window.confirm(`Delete project "${project.name}"? This cannot be undone.`);
+    if (!shouldDelete) {
+      return;
+    }
+    await deleteProject(project.id);
+  };
+
+  const contextMenuItems = useMemo(() => {
+    if (!contextMenuState) {
+      return [];
+    }
+
+    const { project } = contextMenuState;
+
+    return [
+      {
+        id: 'open-project',
+        label: 'Open project',
+        onSelect: () => handleProjectClick(project),
+      },
+      {
+        id: 'add-sub-project',
+        label: 'Add sub-project',
+        onSelect: () => openSubProjectModal(project.id),
+      },
+      {
+        id: 'edit-project',
+        label: 'Edit project',
+        onSelect: () => openProjectModal(project),
+      },
+      {
+        id: 'delete-project',
+        label: 'Delete project',
+        onSelect: () => {
+          void handleDeleteProject(project);
+        },
+        danger: true,
+      },
+    ];
+  }, [contextMenuState, openSubProjectModal, openProjectModal]);
   
   // Handle view change
   const handleViewChange = (view: ViewType) => {
@@ -212,10 +267,18 @@ export function Sidebar({ onAddProject }: SidebarProps) {
                 <div
                   key={project.id}
                   onClick={() => handleProjectClick(project)}
+                  onContextMenu={(event) => handleProjectContextMenu(event, project)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
                       handleProjectClick(project);
+                    }
+                    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                      event.preventDefault();
+                      const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+                      setCurrentProject(project);
+                      setCurrentProjectId(project.id);
+                      setContextMenuState({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, project });
                     }
                   }}
                   role="button"
@@ -256,7 +319,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
           </nav>
         )}
       </div>
-      
+
       {/* Footer */}
       <div className="p-4 border-t border-gray-200 dark:border-gray-700">
         <p className="text-xs text-gray-400 dark:text-gray-500 text-center">
@@ -308,6 +371,14 @@ export function Sidebar({ onAddProject }: SidebarProps) {
           </aside>
         </div>
       )}
+
+      <AppContextMenu
+        open={Boolean(contextMenuState)}
+        x={contextMenuState?.x ?? 0}
+        y={contextMenuState?.y ?? 0}
+        items={contextMenuItems}
+        onClose={closeContextMenu}
+      />
     </>
   );
 }

@@ -1,12 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Calendar, AlertCircle, Pencil, Trash2, ChevronRight, Plus } from 'lucide-react';
 import type { Task } from '../../types';
 import { StatusBadge, PriorityBadge } from '../common/Badge';
 import { Button } from '../common/Button';
+import { AppContextMenu } from '../common/AppContextMenu';
 
 interface TaskListItemProps {
   task: Task;
@@ -17,6 +18,7 @@ interface TaskListItemProps {
 }
 
 export function TaskListItem({ task, onEdit, onDelete, onCreateSubTask, isOverdue }: TaskListItemProps) {
+  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const displayDate = task.end_date || task.due_date;
 
   const formatDate = (dateString: string | null) => {
@@ -41,6 +43,12 @@ export function TaskListItem({ task, onEdit, onDelete, onCreateSubTask, isOverdu
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault();
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      setContextMenuPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      return;
+    }
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       onEdit(task);
@@ -62,7 +70,44 @@ export function TaskListItem({ task, onEdit, onDelete, onCreateSubTask, isOverdu
     onCreateSubTask?.(task.id);
   };
 
+  const handleContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    setContextMenuPosition({ x: event.clientX, y: event.clientY });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenuPosition(null);
+  };
+
+  const contextMenuItems = useMemo(() => {
+    const items = [
+      {
+        id: 'edit-task',
+        label: 'Edit task',
+        onSelect: () => onEdit(task),
+      },
+    ];
+
+    if (onCreateSubTask) {
+      items.push({
+        id: 'create-sub-task',
+        label: 'Add sub-task',
+        onSelect: () => onCreateSubTask(task.id),
+      });
+    }
+
+    items.push({
+      id: 'delete-task',
+      label: 'Delete task',
+      onSelect: () => onDelete(task),
+      danger: true,
+    });
+
+    return items;
+  }, [onCreateSubTask, onDelete, onEdit, task]);
+
   return (
+    <>
     <article
       className={twMerge(
         clsx(
@@ -77,6 +122,7 @@ export function TaskListItem({ task, onEdit, onDelete, onCreateSubTask, isOverdu
         )
       )}
       onClick={handleClick}
+      onContextMenu={handleContextMenu}
       onKeyDown={handleKeyDown}
       tabIndex={0}
       role="button"
@@ -168,6 +214,14 @@ export function TaskListItem({ task, onEdit, onDelete, onCreateSubTask, isOverdu
         </Button>
       </div>
     </article>
+    <AppContextMenu
+      open={Boolean(contextMenuPosition)}
+      x={contextMenuPosition?.x ?? 0}
+      y={contextMenuPosition?.y ?? 0}
+      items={contextMenuItems}
+      onClose={closeContextMenu}
+    />
+    </>
   );
 }
 

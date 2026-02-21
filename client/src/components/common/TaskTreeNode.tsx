@@ -1,11 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import type { TreeNode } from '../../types';
 import type { Task } from '../../types';
 import { TreeNodeRenderer } from './TreeView';
 import { MiniProgressBar } from './ProgressBar';
 import { STATUS_CONFIG } from '../../types';
+import { AppContextMenu } from './AppContextMenu';
 
 interface TaskTreeNodeProps {
   node: TreeNode<Task>;
@@ -36,6 +37,58 @@ export function TaskTreeNode({
   const hasChildren = node.children.length > 0;
   const statusConfig = STATUS_CONFIG[task.status];
   const progress = task.progress_percent ?? 0;
+  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+
+  const handleContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    setContextMenuPosition({ x: event.clientX, y: event.clientY });
+  };
+
+  const handleKeyboardContextMenu = (element: HTMLDivElement) => {
+    const rect = element.getBoundingClientRect();
+    setContextMenuPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenuPosition(null);
+  };
+
+  const contextMenuItems = useMemo(() => {
+    const items = [
+      {
+        id: 'open-task',
+        label: 'Open task',
+        onSelect: () => onSelect(task),
+      },
+    ];
+
+    if (onCreateSubTask) {
+      items.push({
+        id: 'create-sub-task',
+        label: 'Add sub-task',
+        onSelect: () => onCreateSubTask(task.id),
+      });
+    }
+
+    if (onEditTask) {
+      items.push({
+        id: 'edit-task',
+        label: 'Edit task',
+        onSelect: () => onEditTask(task),
+      });
+    }
+
+    if (onDeleteTask) {
+      items.push({
+        id: 'delete-task',
+        label: 'Delete task',
+        onSelect: () => onDeleteTask(task),
+        danger: true,
+      });
+    }
+
+    return items;
+  }, [onCreateSubTask, onDeleteTask, onEditTask, onSelect, task]);
 
   const label = (
     <div className="flex flex-col gap-0.5 flex-1 min-w-0">
@@ -107,16 +160,27 @@ export function TaskTreeNode({
   );
 
   return (
-    <TreeNodeRenderer
-      depth={depth}
-      isExpanded={isExpanded}
-      hasChildren={hasChildren}
-      onToggle={onToggle}
-      label={label}
-      isSelected={isSelected}
-      onClick={() => onSelect(task)}
-      actions={actions}
-    />
+    <>
+      <TreeNodeRenderer
+        depth={depth}
+        isExpanded={isExpanded}
+        hasChildren={hasChildren}
+        onToggle={onToggle}
+        label={label}
+        isSelected={isSelected}
+        onClick={() => onSelect(task)}
+        onContextMenu={handleContextMenu}
+        onKeyboardContextMenu={handleKeyboardContextMenu}
+        actions={actions}
+      />
+      <AppContextMenu
+        open={Boolean(contextMenuPosition)}
+        x={contextMenuPosition?.x ?? 0}
+        y={contextMenuPosition?.y ?? 0}
+        items={contextMenuItems}
+        onClose={closeContextMenu}
+      />
+    </>
   );
 }
 
