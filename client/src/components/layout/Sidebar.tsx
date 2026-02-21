@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useProjects } from '../../context/ProjectContext';
-import { usePeople } from '../../context/PeopleContext';
 import type { ViewType } from '../../types';
 
 interface SidebarProps {
@@ -39,7 +38,6 @@ export function Sidebar({ onAddProject }: SidebarProps) {
   const pathname = usePathname();
   const { sidebarOpen, setSidebarOpen, currentView, setCurrentView, setCurrentProjectId, openSubProjectModal } = useApp();
   const { projects, currentProject, setCurrentProject } = useProjects();
-  const { people } = usePeople();
   const sidebarRef = useRef<HTMLElement>(null);
   
   // Update current project based on URL
@@ -100,12 +98,6 @@ export function Sidebar({ onAddProject }: SidebarProps) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [sidebarOpen, setSidebarOpen]);
-
-  // Get owner for a project
-  const getOwner = (project: typeof projects[0]) => {
-    if (!project.owner_id) return null;
-    return people.find(p => p.id === project.owner_id);
-  };
 
   // Check if we're on the people page
   const isPeoplePage = pathname?.startsWith('/people') ?? false;
@@ -216,9 +208,6 @@ export function Sidebar({ onAddProject }: SidebarProps) {
         ) : (
           <nav className="space-y-1">
             {projects.map((project) => {
-              const owner = getOwner(project);
-              const ownerInitial = owner?.name?.charAt(0)?.toUpperCase() || '?';
-              
               return (
                 <div
                   key={project.id}
@@ -246,18 +235,6 @@ export function Sidebar({ onAddProject }: SidebarProps) {
                     style={{ backgroundColor: project.color }}
                   />
                   <span className="truncate flex-1 text-left">{project.name}</span>
-                  {owner && (
-                    <div 
-                      className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-600 flex-shrink-0"
-                      title={`Owner: ${owner.name}`}
-                    >
-                      <div className="w-4 h-4 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center">
-                        <span className="text-[10px] font-medium text-primary-600 dark:text-primary-400">
-                          {ownerInitial}
-                        </span>
-                      </div>
-                    </div>
-                  )}
                   <button
                     type="button"
                     onClick={(event) => {
