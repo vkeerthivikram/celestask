@@ -1,10 +1,14 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import type { TreeNode } from '../../types';
 import type { Project } from '../../types';
 import { TreeNodeRenderer } from './TreeView';
-import { AppContextMenu } from './AppContextMenu';
+import { AppContextMenu, type AppContextMenuItem } from './AppContextMenu';
+import { useTimeEntries } from '@/context/TimeEntryContext';
+import { Play, Square } from 'lucide-react';
+import { clsx } from 'clsx';
+import { formatDurationUsCompact, formatTimerDisplayUs } from '@/utils/timeFormat';
 
 interface ProjectTreeNodeProps {
   node: TreeNode<Project>;
@@ -32,6 +36,50 @@ export function ProjectTreeNode({
   const project = node.data;
   const hasChildren = node.children.length > 0;
   const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [totalUs, setTotalUs] = useState(0);
+  const [isTimerLoading, setIsTimerLoading] = useState(false);
+  
+  const {
+    timerTick,
+    startProjectTimer,
+    stopProjectTimer,
+    isProjectTimerRunning,
+    getRunningTimerForProject,
+    fetchProjectTimeSummary,
+  } = useTimeEntries();
+  
+  const isTimerRunning = isProjectTimerRunning(project.id);
+  const runningTimer = getRunningTimerForProject(project.id);
+  
+  useEffect(() => {
+    const fetchTime = async () => {
+      try {
+        const summary = await fetchProjectTimeSummary(project.id);
+        setTotalUs(summary.total_time_us);
+      } catch (err) {
+        console.error('Failed to fetch project time:', err);
+      }
+    };
+    fetchTime();
+  }, [project.id, fetchProjectTimeSummary, runningTimer]);
+  
+  const handleTimerClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsTimerLoading(true);
+    try {
+      if (isTimerRunning) {
+        await stopProjectTimer(project.id);
+        const summary = await fetchProjectTimeSummary(project.id);
+        setTotalUs(summary.total_time_us);
+      } else {
+        await startProjectTimer(project.id);
+      }
+    } catch (err) {
+      console.error('Timer action failed:', err);
+    } finally {
+      setIsTimerLoading(false);
+    }
+  };
   
   // Get owner display info
   const owner = project.owner;
@@ -51,8 +99,8 @@ export function ProjectTreeNode({
     setContextMenuPosition(null);
   };
 
-  const contextMenuItems = useMemo(() => {
-    const items = [
+  const contextMenuItems = useMemo((): AppContextMenuItem[] => {
+    const items: AppContextMenuItem[] = [
       {
         id: 'open-project',
         label: 'Open project',
@@ -90,6 +138,40 @@ export function ProjectTreeNode({
 
   const actions = (
     <>
+      <button
+        type="button"
+        className={clsx(
+          'p-1 rounded transition-colors',
+          isTimerRunning
+            ? 'text-green-500 hover:text-green-600'
+            : 'text-gray-400 hover:text-blue-500'
+        )}
+        onClick={handleTimerClick}
+        disabled={isTimerLoading}
+        title={isTimerRunning 
+          ? 'Stop timer' 
+          : totalUs > 0 
+            ? `${formatDurationUsCompact(totalUs)} tracked - Start timer` 
+            : 'Start timer'
+        }
+        aria-label={isTimerRunning ? 'Stop timer' : 'Start timer'}
+      >
+        {isTimerRunning ? (
+          <div className="flex items-center gap-1">
+            <Square className="w-4 h-4" />
+            <span className="text-xs tabular-nums">
+              {runningTimer && formatTimerDisplayUs(runningTimer.start_time)}
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1">
+            <Play className="w-4 h-4" />
+            {totalUs > 0 && (
+              <span className="text-xs tabular-nums">{formatDurationUsCompact(totalUs)}</span>
+            )}
+          </div>
+        )}
+      </button>
       {onCreateSubProject && (
         <button
           type="button"
@@ -147,14 +229,12 @@ export function ProjectTreeNode({
       <span>{project.name}</span>
       {owner && (
         <div 
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700"
-          title={`Owner: ${owner.name}`}
+          className="w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0"
+          title={owner.name}
         >
-          <div className="w-4 h-4 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center">
-            <span className="text-[10px] font-medium text-primary-600 dark:text-primary-400">
-              {ownerInitial}
-            </span>
-          </div>
+          <span className="text-primary-600 dark:text-primary-400 text-xs font-medium">
+            {ownerInitial}
+          </span>
         </div>
       )}
     </div>
@@ -165,15 +245,15 @@ export function ProjectTreeNode({
       <TreeNodeRenderer
         depth={depth}
         isExpanded={isExpanded}
-        hasChildren={hasChildren}
         onToggle={onToggle}
-        label={labelContent}
-        color={project.color}
         isSelected={isSelected}
         onClick={() => onSelect(project)}
         onContextMenu={handleContextMenu}
         onKeyboardContextMenu={handleKeyboardContextMenu}
         actions={actions}
+        color={project.color}
+        label={labelContent}
+        hasChildren={hasChildren}
       />
       <AppContextMenu
         open={Boolean(contextMenuPosition)}

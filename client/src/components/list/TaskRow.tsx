@@ -3,13 +3,15 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Pencil, Trash2, Calendar, AlertCircle, Users, GitBranch, Check, Loader2, Plus } from 'lucide-react';
+import { Pencil, Trash2, Calendar, AlertCircle, Users, GitBranch, Check, Loader2, Plus, Play, Square } from 'lucide-react';
 import type { Task, TaskStatus, TaskPriority } from '../../types';
 import { StatusBadge, PriorityBadge, TagBadge } from '../common/Badge';
 import { Button } from '../common/Button';
 import { MiniProgressBar } from '../common/ProgressBar';
 import { useTasks } from '../../context/TaskContext';
-import { AppContextMenu } from '../common/AppContextMenu';
+import { AppContextMenu, type AppContextMenuItem } from '../common/AppContextMenu';
+import { useTimeEntries } from '@/context/TimeEntryContext';
+import { formatDurationUsCompact, formatTimerDisplayUs } from '@/utils/timeFormat';
 
 interface TaskRowProps {
   task: Task;
@@ -54,8 +56,52 @@ export function TaskRow({
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [totalUs, setTotalUs] = useState(0);
+  const [isTimerLoading, setIsTimerLoading] = useState(false);
   
   const { updateTaskStatus, updateTask, updateTaskProgress } = useTasks();
+  
+  const {
+    timerTick,
+    startTaskTimer,
+    stopTaskTimer,
+    isTaskTimerRunning,
+    getRunningTimerForTask,
+    fetchTaskTimeSummary,
+  } = useTimeEntries();
+  
+  const isTimerRunning = isTaskTimerRunning(task.id);
+  const runningTimer = getRunningTimerForTask(task.id);
+  
+  useEffect(() => {
+    const fetchTime = async () => {
+      try {
+        const summary = await fetchTaskTimeSummary(task.id);
+        setTotalUs(summary.total_time_us);
+      } catch (err) {
+        console.error('Failed to fetch task time:', err);
+      }
+    };
+    fetchTime();
+  }, [task.id, fetchTaskTimeSummary, runningTimer]);
+  
+  const handleTimerClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsTimerLoading(true);
+    try {
+      if (isTimerRunning) {
+        await stopTaskTimer(task.id);
+        const summary = await fetchTaskTimeSummary(task.id);
+        setTotalUs(summary.total_time_us);
+      } else {
+        await startTaskTimer(task.id);
+      }
+    } catch (err) {
+      console.error('Timer action failed:', err);
+    } finally {
+      setIsTimerLoading(false);
+    }
+  };
   
   const titleInputRef = useRef<HTMLInputElement>(null);
   const progressInputRef = useRef<HTMLInputElement>(null);
@@ -150,8 +196,8 @@ export function TaskRow({
     setContextMenuPosition(null);
   };
 
-  const contextMenuItems = useMemo(() => {
-    const items = [
+  const contextMenuItems = useMemo((): AppContextMenuItem[] => {
+    const items: AppContextMenuItem[] = [
       {
         id: 'edit-task',
         label: 'Edit task',
@@ -632,6 +678,35 @@ export function TaskRow({
             {displayDate ? `${task.end_date ? 'End ' : ''}${formatDate(displayDate)}` : '-'}
           </span>
         </div>
+      </td>
+
+      {/* Timer */}
+      <td className="px-4 py-3">
+        <button
+          onClick={handleTimerClick}
+          disabled={isTimerLoading}
+          className={twMerge(clsx(
+            'flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors',
+            isTimerRunning
+              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600',
+            isTimerLoading && 'opacity-50 cursor-wait'
+          ))}
+          title={isTimerRunning ? 'Stop timer' : totalUs > 0 ? `${formatDurationUsCompact(totalUs)} tracked` : 'Start timer'}
+          aria-label={isTimerRunning ? 'Stop timer' : 'Start timer'}
+        >
+          {isTimerRunning ? (
+            <>
+              <Square className="w-3 h-3" />
+              {runningTimer && formatTimerDisplayUs(runningTimer.start_time)}
+            </>
+          ) : (
+            <>
+              <Play className="w-3 h-3" />
+              {totalUs > 0 ? formatDurationUsCompact(totalUs) : ''}
+            </>
+          )}
+        </button>
       </td>
 
       {/* Actions */}

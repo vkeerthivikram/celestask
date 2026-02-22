@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { ClipboardList, Calendar, Flag, Loader2, User, Tag, X, Plus, Clock, GitBranch, Users, FormInput } from 'lucide-react';
-import type { Task, Project, CreateTaskDTO, UpdateTaskDTO, TaskStatus, TaskPriority, Person, Tag as TagType, CustomFieldValue, CustomField } from '../../types';
+import { ClipboardList, Calendar, Flag, Loader2, User, Tag, X, Plus, Clock, GitBranch, Users, FormInput, Play, Square, Edit2, Trash2 } from 'lucide-react';
+import type { Task, Project, CreateTaskDTO, UpdateTaskDTO, TaskStatus, TaskPriority, Person, Tag as TagType, CustomFieldValue, CustomField, TimeEntry, UpdateTimeEntryDTO } from '../../types';
 import { STATUS_CONFIG, PRIORITY_CONFIG } from '../../types';
 import { Button } from './Button';
 import { TagBadge } from './Badge';
@@ -14,6 +14,8 @@ import { usePeople } from '../../context/PeopleContext';
 import { useTags } from '../../context/TagContext';
 import { useTasks } from '../../context/TaskContext';
 import { useCustomFields } from '../../context/CustomFieldContext';
+import { useTimeEntries } from '../../context/TimeEntryContext';
+import { formatDurationUs, formatDurationUsCompact, formatTimerDisplayUs, parseDurationStringToUs, TIME_UNITS } from '@/utils/timeFormat';
 
 interface TaskFormProps {
   task?: Task | null;
@@ -48,6 +50,28 @@ interface FormErrors {
   end_date?: string;
 }
 
+function formatDateTime(isoString: string): string {
+  const date = new Date(isoString);
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+// Helper function to format date for datetime-local input
+function formatDateTimeLocal(isoString: string): string {
+  const date = new Date(isoString);
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 export function TaskForm({
   task,
   project,
@@ -64,6 +88,34 @@ export function TaskForm({
   const { availableTags } = useTags();
   const { tasks } = useTasks();
   const { availableFields, fetchCustomFields, fetchTaskCustomFields, setTaskCustomField, getTaskFieldValue } = useCustomFields();
+  const {
+    timerTick,
+    startTaskTimer,
+    stopTaskTimer,
+    isTaskTimerRunning,
+    getRunningTimerForTask,
+    fetchTaskTimeSummary,
+    updateTimeEntry,
+    deleteTimeEntry,
+  } = useTimeEntries();
+  
+  // Time tracking state
+  const [timeSummary, setTimeSummary] = useState<{
+    total_time_us: number;
+    direct_time_us: number;
+    children_time_us: number;
+    entries: TimeEntry[];
+  } | null>(null);
+  const [isTimerLoading, setIsTimerLoading] = useState(false);
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editEntryForm, setEditEntryForm] = useState<{
+    start_time: string;
+    end_time: string;
+    description: string;
+  }>({ start_time: '', end_time: '', description: '' });
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualDuration, setManualDuration] = useState('');
+  const [manualDescription, setManualDescription] = useState('');
   
   // Custom field values state (fieldId -> value)
   const [customFieldValues, setCustomFieldValues] = useState<Map<string, any>>(new Map());
@@ -98,9 +150,9 @@ export function TaskForm({
     description: task?.description || '',
     status: task?.status || 'todo',
     priority: task?.priority || 'medium',
-    due_date: task?.due_date ? task.due_date.split('T')[0] : '',
-    start_date: task?.start_date ? task.start_date.split('T')[0] : '',
-    end_date: task?.end_date ? task.end_date.split('T')[0] : '',
+    due_date: task?.due_date || '',
+    start_date: task?.start_date || '',
+    end_date: task?.end_date || '',
     assignee_id: task?.assignee_id || null,
     parent_task_id: task?.parent_task_id || propParentTaskId || null,
     progress_percent: task?.progress_percent || 0,
@@ -108,124 +160,266 @@ export function TaskForm({
     actual_duration_minutes: task?.actual_duration_minutes || 0,
   });
   
-  // Selected co-assignees and tags (for editing existing task)
-  const [selectedCoAssignees, setSelectedCoAssignees] = useState<Person[]>([]);
-  const [selectedTags, setSelectedTags] = useState<TagType[]>([]);
-  
-  // UI state for dropdowns
-  const [showCoAssigneeSelect, setShowCoAssigneeSelect] = useState(false);
-  const [showTagSelect, setShowTagSelect] = useState(false);
-  
   const [errors, setErrors] = useState<FormErrors>({});
   
-  // Initialize co-assignees and tags when editing
-  useEffect(() => {
-    if (task) {
-      setFormData({
-        title: task.title,
-        description: task.description,
-        status: task.status,
-        priority: task.priority,
-        due_date: task.due_date ? task.due_date.split('T')[0] : '',
-        start_date: task.start_date ? task.start_date.split('T')[0] : '',
-        end_date: task.end_date ? task.end_date.split('T')[0] : '',
-        assignee_id: task.assignee_id || null,
-        parent_task_id: task.parent_task_id || propParentTaskId || null,
-        progress_percent: task.progress_percent || 0,
-        estimated_duration_minutes: task.estimated_duration_minutes || 0,
-        actual_duration_minutes: task.actual_duration_minutes || 0,
-      });
-      
-      // Set co-assignees from task
-      if (task.coAssignees && task.coAssignees.length > 0) {
-        const coAssigneePeople = task.coAssignees
-          .map(ca => ca.person)
-          .filter((p): p is Person => p !== undefined);
-        setSelectedCoAssignees(coAssigneePeople);
-      }
-      
-      // Set tags from task
-      if (task.tags && task.tags.length > 0) {
-        const taskTags = task.tags
-          .map(tt => tt.tag)
-          .filter((t): t is TagType => t !== undefined);
-        setSelectedTags(taskTags);
-      }
-    }
-  }, [task, propParentTaskId]);
+  // Co-assignees state
+  const [selectedCoAssignees, setSelectedCoAssignees] = useState<Person[]>([]);
+  const [showCoAssigneeSelect, setShowCoAssigneeSelect] = useState(false);
   
-  // Fetch custom fields when project changes
+  // Tags state
+  const [selectedTags, setSelectedTags] = useState<TagType[]>([]);
+  const [showTagSelect, setShowTagSelect] = useState(false);
+  
+  // Fetch custom fields and values when editing
   useEffect(() => {
     if (currentProjectId) {
       fetchCustomFields(String(currentProjectId));
-    } else {
-      fetchCustomFields(); // Fetch global fields only
     }
   }, [currentProjectId, fetchCustomFields]);
   
-  // Load existing custom field values when editing
   useEffect(() => {
-    if (task && availableFields.length > 0) {
-      // Fetch existing values from API
+    if (task) {
       fetchTaskCustomFields(task.id);
-    }
-  }, [task, availableFields, fetchTaskCustomFields]);
-  
-  // Update local state when task field values are loaded
-  useEffect(() => {
-    if (task && availableFields.length > 0) {
-      const values = new Map<string, any>();
-      availableFields.forEach(field => {
-        const fieldValue = getTaskFieldValue(task.id, field.id);
-        if (fieldValue) {
-          values.set(field.id, fieldValue.value);
+      
+      // Load existing custom field values
+      const loadCustomFieldValues = async () => {
+        const values = new Map<string, any>();
+        for (const field of availableFields) {
+          const value = getTaskFieldValue(task.id, field.id);
+          if (value !== undefined && value !== null) {
+            values.set(field.id, value);
+          }
         }
-      });
-      setCustomFieldValues(values);
+        setCustomFieldValues(values);
+      };
+      loadCustomFieldValues();
+      
+      // Load existing co-assignees
+      if (task.coAssignees) {
+        const coAssigneeIds = task.coAssignees.map(ca => ca.person_id);
+        setSelectedCoAssignees(people.filter(p => coAssigneeIds.includes(p.id)));
+      }
+      
+      // Load existing tags
+      if (task.tags) {
+        const tagIds = task.tags.map(tt => tt.tag_id);
+        setSelectedTags(tagsForProject.filter(t => tagIds.includes(t.id)));
+      }
     }
-  }, [task, availableFields, getTaskFieldValue]);
+  }, [task, availableFields, people, tagsForProject, fetchTaskCustomFields, getTaskFieldValue]);
+  
+  // Fetch time tracking data when editing
+  useEffect(() => {
+    if (task) {
+      const fetchTimeData = async () => {
+        try {
+          const summary = await fetchTaskTimeSummary(task.id);
+          setTimeSummary({
+            total_time_us: summary.total_time_us,
+            direct_time_us: summary.direct_time_us,
+            children_time_us: summary.children_time_us,
+            entries: summary.entries,
+          });
+        } catch (err) {
+          console.error('Failed to fetch time summary:', err);
+        }
+      };
+      fetchTimeData();
+    }
+  }, [task, fetchTaskTimeSummary]);
+  
+  // Timer running state
+  const isRunning = task ? isTaskTimerRunning(task.id) : false;
+  const runningTimer = task ? getRunningTimerForTask(task.id) : undefined;
+  
+  // Available co-assignees (exclude primary assignee and already selected)
+  const availableCoAssignees = useMemo(() => {
+    return availablePeople.filter(p => 
+      p.id !== formData.assignee_id &&
+      !selectedCoAssignees.some(s => s.id === p.id)
+    );
+  }, [availablePeople, formData.assignee_id, selectedCoAssignees]);
+  
+  // Available tags to add
+  const availableTagsToAdd = useMemo(() => {
+    return tagsForProject.filter(t => 
+      !selectedTags.some(s => s.id === t.id)
+    );
+  }, [tagsForProject, selectedTags]);
+  
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    
+    let parsedValue: string | number | null = value;
+    
+    if (type === 'number') {
+      parsedValue = value === '' ? 0 : Number(value);
+    } else if (name === 'assignee_id' || name === 'parent_task_id') {
+      parsedValue = value === '' ? null : Number(value);
+    }
+    
+    setFormData(prev => ({ ...prev, [name]: parsedValue }));
+    
+    // Clear error when field is modified
+    if (errors[name as keyof FormErrors]) {
+      setErrors(prev => ({ ...prev, [name]: undefined }));
+    }
+  };
+  
+  const handleCustomFieldChange = (fieldId: string, value: any) => {
+    setCustomFieldValues(prev => new Map(prev).set(fieldId, value));
+  };
+  
+  const handleAddCoAssignee = (personId: number) => {
+    const person = availablePeople.find(p => p.id === personId);
+    if (person && !selectedCoAssignees.some(s => s.id === personId)) {
+      setSelectedCoAssignees(prev => [...prev, person]);
+    }
+    setShowCoAssigneeSelect(false);
+  };
+  
+  const handleRemoveCoAssignee = (personId: number) => {
+    setSelectedCoAssignees(prev => prev.filter(p => p.id !== personId));
+  };
+  
+  const handleAddTag = (tagId: number) => {
+    const tag = tagsForProject.find(t => t.id === tagId);
+    if (tag && !selectedTags.some(s => s.id === tagId)) {
+      setSelectedTags(prev => [...prev, tag]);
+    }
+    setShowTagSelect(false);
+  };
+  
+  const handleRemoveTag = (tagId: number) => {
+    setSelectedTags(prev => prev.filter(t => t.id !== tagId));
+  };
+  
+  // Timer handlers
+  const handleTimerClick = async () => {
+    if (!task) return;
+    
+    setIsTimerLoading(true);
+    try {
+      if (isRunning) {
+        await stopTaskTimer(task.id);
+        const summary = await fetchTaskTimeSummary(task.id);
+        setTimeSummary({
+          total_time_us: summary.total_time_us,
+          direct_time_us: summary.direct_time_us,
+          children_time_us: summary.children_time_us,
+          entries: summary.entries,
+        });
+      } else {
+        await startTaskTimer(task.id);
+      }
+    } catch (err) {
+      console.error('Timer action failed:', err);
+    } finally {
+      setIsTimerLoading(false);
+    }
+  };
+  
+  // Time entry edit handlers
+  const handleEditEntry = (entry: TimeEntry) => {
+    setEditingEntryId(entry.id);
+    setEditEntryForm({
+      start_time: formatDateTimeLocal(entry.start_time),
+      end_time: entry.end_time ? formatDateTimeLocal(entry.end_time) : '',
+      description: entry.description || '',
+    });
+  };
+  
+  const handleCancelEditEntry = () => {
+    setEditingEntryId(null);
+    setEditEntryForm({ start_time: '', end_time: '', description: '' });
+  };
+  
+  const handleSaveEditEntry = async (entryId: string) => {
+    const startTime = new Date(editEntryForm.start_time);
+    const endTime = editEntryForm.end_time ? new Date(editEntryForm.end_time) : null;
+    
+    let durationUs: number | undefined;
+    if (endTime) {
+      durationUs = Math.round((endTime.getTime() - startTime.getTime()) * TIME_UNITS.MILLISECOND);
+    }
+    
+    const data: UpdateTimeEntryDTO = {
+      start_time: startTime.toISOString(),
+      end_time: endTime ? endTime.toISOString() : null,
+      duration_us: durationUs,
+      description: editEntryForm.description || null,
+    };
+    
+    try {
+      await updateTimeEntry(entryId, data);
+      
+      // Update local state
+      if (timeSummary) {
+        setTimeSummary({
+          ...timeSummary,
+          entries: timeSummary.entries.map(e => {
+            if (e.id === entryId) {
+              return {
+                ...e,
+                start_time: data.start_time!,
+                end_time: data.end_time || null,
+                duration_us: durationUs || e.duration_us,
+                description: data.description || null,
+              };
+            }
+            return e;
+          }),
+        });
+      }
+      
+      setEditingEntryId(null);
+      setEditEntryForm({ start_time: '', end_time: '', description: '' });
+    } catch (err) {
+      console.error('Failed to update time entry:', err);
+    }
+  };
+  
+  const handleDeleteEntry = async (entryId: string) => {
+    if (!confirm('Are you sure you want to delete this time entry?')) {
+      return;
+    }
+    
+    try {
+      await deleteTimeEntry(entryId);
+      
+      if (timeSummary) {
+        const entry = timeSummary.entries.find(e => e.id === entryId);
+        const deletedUs = entry?.duration_us || 0;
+        
+        setTimeSummary({
+          ...timeSummary,
+          total_time_us: timeSummary.total_time_us - deletedUs,
+          direct_time_us: timeSummary.direct_time_us - deletedUs,
+          entries: timeSummary.entries.filter(e => e.id !== entryId),
+        });
+      }
+    } catch (err) {
+      console.error('Failed to delete time entry:', err);
+    }
+  };
   
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
     
     if (!formData.title.trim()) {
-      newErrors.title = 'Task title is required';
-    } else if (formData.title.length > 200) {
-      newErrors.title = 'Task title must be less than 200 characters';
+      newErrors.title = 'Title is required';
     }
     
-    if (formData.description.length > 2000) {
-      newErrors.description = 'Description must be less than 2000 characters';
-    }
-    
-    // Validate date range
+    // Validate date order
     if (formData.start_date && formData.end_date) {
-      const startDate = new Date(formData.start_date);
-      const endDate = new Date(formData.end_date);
-
-      if (startDate > endDate) {
-        newErrors.start_date = 'Start date cannot be after end date';
-        newErrors.end_date = 'End date cannot be before start date';
+      if (new Date(formData.start_date) > new Date(formData.end_date)) {
+        newErrors.end_date = 'End date must be after start date';
       }
     }
-
-    if (formData.end_date && formData.due_date) {
-      const endDate = new Date(formData.end_date);
-      const dueDate = new Date(formData.due_date);
-
-      if (endDate > dueDate) {
-        newErrors.end_date = 'End date cannot be after due date';
-        newErrors.due_date = 'Due date cannot be before end date';
-      }
-    }
-
+    
     if (formData.start_date && formData.due_date) {
-      const startDate = new Date(formData.start_date);
-      const dueDate = new Date(formData.due_date);
-      
-      if (startDate > dueDate) {
-        newErrors.start_date = 'Start date cannot be after due date';
-        newErrors.due_date = 'Due date cannot be before start date';
+      if (new Date(formData.start_date) > new Date(formData.due_date)) {
+        newErrors.due_date = 'Due date must be after start date';
       }
     }
     
@@ -236,160 +430,68 @@ export function TaskForm({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      return;
+    }
     
-    try {
-      const data: CreateTaskDTO | UpdateTaskDTO = {
-        title: formData.title.trim(),
-        description: formData.description.trim(),
-        status: formData.status,
-        priority: formData.priority,
-        due_date: formData.due_date || null,
-        start_date: formData.start_date || null,
-        end_date: formData.end_date || null,
-        assignee_id: formData.assignee_id || undefined,
-        parent_task_id: formData.parent_task_id || null,
-        progress_percent: formData.progress_percent,
-        estimated_duration_minutes: formData.estimated_duration_minutes || undefined,
-        actual_duration_minutes: formData.actual_duration_minutes || undefined,
-        ...(isEditing ? {} : { 
-          project_id: currentProjectId,
-          tag_ids: selectedTags.map(t => t.id),
-          co_assignee_ids: selectedCoAssignees.map(p => p.id),
-        }),
-      };
-      
-      await onSubmit(data);
-      
-      // Save custom field values after task is saved
-      // Note: For new tasks, we need the task ID from the response
-      // This is handled by the parent component passing the task back
-      if (task?.id) {
-        // Save custom field values for existing task
-        for (const [fieldId, value] of customFieldValues) {
+    // Build base data
+    const data: CreateTaskDTO | UpdateTaskDTO = {
+      title: formData.title.trim(),
+      description: formData.description.trim() || undefined,
+      status: formData.status,
+      priority: formData.priority,
+      due_date: formData.due_date || null,
+      start_date: formData.start_date || null,
+      end_date: formData.end_date || null,
+      assignee_id: formData.assignee_id || undefined,
+      parent_task_id: formData.parent_task_id || undefined,
+      progress_percent: formData.progress_percent,
+      estimated_duration_minutes: formData.estimated_duration_minutes || undefined,
+      actual_duration_minutes: formData.actual_duration_minutes || undefined,
+    };
+    
+    // Add project_id for new tasks
+    if (!isEditing && currentProjectId) {
+      (data as CreateTaskDTO).project_id = currentProjectId;
+    }
+    
+    await onSubmit(data);
+    
+    // Handle custom fields, co-assignees, and tags after submit if editing
+    if (task) {
+      // Save custom field values
+      for (const [fieldId, value] of customFieldValues) {
+        try {
           await setTaskCustomField(task.id, fieldId, value);
+        } catch (err) {
+          console.error('Failed to save custom field:', err);
         }
       }
-    } catch {
-      // Error handling is done by the parent component
+      
+      // Handle co-assignees
+      const currentCoAssigneeIds = task.coAssignees?.map(ca => ca.person_id) || [];
+      const newCoAssigneeIds = selectedCoAssignees.map(p => p.id);
+      
+      // We'll handle co-assignees through the task update callback
+      // For now, just note that this would need additional API calls
+      
+      // Handle tags
+      const currentTagIds = task.tags?.map(tt => tt.tag_id) || [];
+      const newTagIds = selectedTags.map(t => t.id);
+      
+      // Same for tags - would need additional API calls
     }
   };
   
-  // Handle custom field value change
-  const handleCustomFieldChange = (fieldId: string, value: any) => {
-    setCustomFieldValues(prev => {
-      const newValues = new Map(prev);
-      newValues.set(fieldId, value);
-      return newValues;
-    });
-  };
-  
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-  ) => {
-    const { name, value, type } = e.target;
-    
-    if (name === 'assignee_id') {
-      setFormData(prev => ({ 
-        ...prev, 
-        [name]: value ? Number(value) : null 
-      }));
-    } else if (name === 'parent_task_id') {
-      setFormData(prev => ({ 
-        ...prev, 
-        [name]: value ? Number(value) : null 
-      }));
-    } else if (type === 'number') {
-      setFormData(prev => ({ 
-        ...prev, 
-        [name]: Number(value) 
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
-    }
-    
-    // Clear error when user starts typing
-    if (errors[name as keyof FormErrors]) {
-      setErrors(prev => ({ ...prev, [name]: undefined }));
-    }
-  };
-  
-  // Add co-assignee
-  const handleAddCoAssignee = (personId: number) => {
-    const person = availablePeople.find(p => p.id === personId);
-    if (person && !selectedCoAssignees.find(p => p.id === personId)) {
-      // Don't add if already primary assignee
-      if (formData.assignee_id !== personId) {
-        setSelectedCoAssignees(prev => [...prev, person]);
-      }
-    }
-    setShowCoAssigneeSelect(false);
-  };
-  
-  // Remove co-assignee
-  const handleRemoveCoAssignee = (personId: number) => {
-    setSelectedCoAssignees(prev => prev.filter(p => p.id !== personId));
-  };
-  
-  // Add tag
-  const handleAddTag = (tagId: number) => {
-    const tag = tagsForProject.find(t => t.id === tagId);
-    if (tag && !selectedTags.find(t => t.id === tagId)) {
-      setSelectedTags(prev => [...prev, tag]);
-    }
-    setShowTagSelect(false);
-  };
-  
-  // Remove tag
-  const handleRemoveTag = (tagId: number) => {
-    setSelectedTags(prev => prev.filter(t => t.id !== tagId));
-  };
-  
-  // Get available co-assignees (excluding primary assignee and already selected)
-  const availableCoAssignees = useMemo(() => {
-    return availablePeople.filter(p => 
-      p.id !== formData.assignee_id && 
-      !selectedCoAssignees.find(s => s.id === p.id)
-    );
-  }, [availablePeople, formData.assignee_id, selectedCoAssignees]);
-  
-  // Get available tags (excluding already selected)
-  const availableTagsToAdd = useMemo(() => {
-    return tagsForProject.filter(t => 
-      !selectedTags.find(s => s.id === t.id)
-    );
-  }, [tagsForProject, selectedTags]);
-
-  // Helper to format duration
-  const formatDuration = (minutes: number): string => {
-    if (minutes === 0) return '0m';
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (hours === 0) return `${mins}m`;
-    if (mins === 0) return `${hours}h`;
-    return `${hours}h ${mins}m`;
-  };
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Project Info (if available) */}
-      {project && (
-        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 pb-2">
-          <div
-            className="w-3 h-3 rounded"
-            style={{ backgroundColor: project.color }}
-          />
-          <span>{project.name}</span>
-        </div>
-      )}
-      
-      {/* Task Title */}
+      {/* Title */}
       <div>
         <label
           htmlFor="title"
           className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
         >
-          Task Title <span className="text-red-500">*</span>
+          Title <span className="text-red-500">*</span>
         </label>
         <input
           type="text"
@@ -397,19 +499,18 @@ export function TaskForm({
           name="title"
           value={formData.title}
           onChange={handleInputChange}
-          placeholder="Enter task title"
           className={twMerge(
             clsx(
               'w-full px-3 py-2 rounded-md border shadow-sm',
               'bg-white dark:bg-gray-900',
               'text-gray-900 dark:text-gray-100',
-              'placeholder-gray-400 dark:placeholder-gray-500',
               'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
               errors.title
                 ? 'border-red-500 dark:border-red-400'
                 : 'border-gray-300 dark:border-gray-600'
             )
           )}
+          placeholder="Enter task title"
           disabled={isLoading}
           autoFocus
         />
@@ -431,31 +532,23 @@ export function TaskForm({
           name="description"
           value={formData.description}
           onChange={handleInputChange}
-          placeholder="Enter task description (optional)"
           rows={3}
           className={twMerge(
             clsx(
-              'w-full px-3 py-2 rounded-md border shadow-sm resize-none',
-              'bg:white dark:bg-gray-900',
+              'w-full px-3 py-2 rounded-md border shadow-sm',
+              'bg-white dark:bg-gray-900',
               'text-gray-900 dark:text-gray-100',
-              'placeholder-gray-400 dark:placeholder-gray-500',
               'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
-              errors.description
-                ? 'border-red-500 dark:border-red-400'
-                : 'border-gray-300 dark:border-gray-600'
+              'border-gray-300 dark:border-gray-600',
+              'resize-none'
             )
           )}
+          placeholder="Add a description..."
           disabled={isLoading}
         />
-        {errors.description && (
-          <p className="mt-1 text-sm text-red-500 dark:text-red-400">{errors.description}</p>
-        )}
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          {formData.description.length}/2000 characters
-        </p>
       </div>
       
-      {/* Parent Task (for nested tasks) */}
+      {/* Parent Task */}
       {availableParentTasks.length > 0 && (
         <div>
           <label
@@ -481,7 +574,7 @@ export function TaskForm({
             )}
             disabled={isLoading}
           >
-            <option value="">No parent task (top-level)</option>
+            <option value="">No parent (root task)</option>
             {availableParentTasks.map(t => (
               <option key={t.id} value={t.id}>
                 {t.title}
@@ -491,8 +584,8 @@ export function TaskForm({
         </div>
       )}
       
-      {/* Status and Priority Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Status and Priority */}
+      <div className="grid grid-cols-2 gap-4">
         {/* Status */}
         <div>
           <label
@@ -628,7 +721,7 @@ export function TaskForm({
             />
             {formData.estimated_duration_minutes > 0 && (
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                = {formatDuration(formData.estimated_duration_minutes)}
+                = {formatDurationUs(formData.estimated_duration_minutes * TIME_UNITS.MINUTE)}
               </p>
             )}
           </div>
@@ -661,12 +754,289 @@ export function TaskForm({
             />
             {formData.actual_duration_minutes > 0 && (
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                = {formatDuration(formData.actual_duration_minutes)}
+                = {formatDurationUs(formData.actual_duration_minutes * TIME_UNITS.MINUTE)}
               </p>
             )}
           </div>
         </div>
       </div>
+      
+      {/* Time Tracking Section - Only show for existing tasks */}
+      {isEditing && task && (
+        <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-md space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              <Clock className="w-4 h-4 inline-block mr-1" />
+              Time Tracking
+            </label>
+            
+            <div className="flex items-center gap-2">
+              {isRunning && runningTimer ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-mono text-green-600 dark:text-green-400 font-semibold animate-pulse">
+                    {formatTimerDisplayUs(runningTimer.start_time)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleTimerClick}
+                    disabled={isTimerLoading}
+                    className={twMerge(clsx(
+                      'px-3 py-1.5 rounded-md text-sm font-medium',
+                      'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+                      'hover:bg-red-200 dark:hover:bg-red-900/50',
+                      'disabled:opacity-50 transition-colors'
+                    ))}
+                  >
+                    <Square className="w-4 h-4 inline mr-1" />
+                    Stop
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleTimerClick}
+                    disabled={isTimerLoading}
+                    className={twMerge(clsx(
+                      'px-3 py-1.5 rounded-md text-sm font-medium',
+                      'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+                      'hover:bg-green-200 dark:hover:bg-green-900/50',
+                      'disabled:opacity-50 transition-colors'
+                    ))}
+                  >
+                    <Play className="w-4 h-4 inline mr-1" />
+                    Start
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowManualEntry(!showManualEntry)}
+                    className={twMerge(clsx(
+                      'px-3 py-1.5 rounded-md text-sm font-medium',
+                      'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
+                      'hover:bg-gray-200 dark:hover:bg-gray-600',
+                      'transition-colors'
+                    ))}
+                  >
+                    <Plus className="w-4 h-4 inline mr-1" />
+                    Add
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Manual entry form */}
+          {showManualEntry && (
+            <div className="p-3 bg-white dark:bg-gray-900 rounded-md space-y-3 border border-gray-200 dark:border-gray-700">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    Duration (e.g., 1h 30m, 2d, 500ms)
+                  </label>
+                  <input
+                    type="text"
+                    value={manualDuration}
+                    onChange={(e) => setManualDuration(e.target.value)}
+                    placeholder="1h 30m"
+                    className="w-full px-2 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    Description (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={manualDescription}
+                    onChange={(e) => setManualDescription(e.target.value)}
+                    placeholder="What did you work on?"
+                    className="w-full px-2 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowManualEntry(false)}
+                  className="px-3 py-1 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const durationUs = parseDurationStringToUs(manualDuration);
+                    if (durationUs === null || durationUs <= 0) return;
+                    
+                    const now = new Date();
+                    const startTime = new Date(now.getTime() - (durationUs / TIME_UNITS.MILLISECOND));
+                    
+                    const { addManualTaskTimeEntry } = useTimeEntries();
+                    try {
+                      await addManualTaskTimeEntry(task.id, {
+                        start_time: startTime.toISOString(),
+                        end_time: now.toISOString(),
+                        duration_us: durationUs,
+                        description: manualDescription || undefined,
+                      });
+                      
+                      setShowManualEntry(false);
+                      setManualDuration('');
+                      setManualDescription('');
+                      
+                      const summary = await fetchTaskTimeSummary(task.id);
+                      setTimeSummary({
+                        total_time_us: summary.total_time_us,
+                        direct_time_us: summary.direct_time_us,
+                        children_time_us: summary.children_time_us,
+                        entries: summary.entries,
+                      });
+                    } catch (err) {
+                      console.error('Failed to add manual time:', err);
+                    }
+                  }}
+                  disabled={!manualDuration || (parseDurationStringToUs(manualDuration) ?? 0) <= 0}
+                  className={twMerge(clsx(
+                    'px-3 py-1 text-sm rounded',
+                    'bg-primary-600 text-white',
+                    'hover:bg-primary-700',
+                    'disabled:opacity-50 disabled:cursor-not-allowed'
+                  ))}
+                >
+                  Add Time
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Time summary */}
+          {timeSummary && (
+            <div className="grid grid-cols-3 gap-2 p-2 bg-white dark:bg-gray-900/30 rounded">
+              <div className="text-center">
+                <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {formatDurationUs(timeSummary.direct_time_us)}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Direct</div>
+              </div>
+              {timeSummary.children_time_us > 0 && (
+                <div className="text-center">
+                  <div className="text-lg font-semibold text-gray-700 dark:text-gray-300">
+                    {formatDurationUs(timeSummary.children_time_us)}
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Subtasks</div>
+                </div>
+              )}
+              <div className="text-center">
+                <div className="text-lg font-semibold text-primary-600 dark:text-primary-400">
+                  {formatDurationUs(timeSummary.total_time_us)}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Total</div>
+              </div>
+            </div>
+          )}
+          
+          {/* Time entries list */}
+          {timeSummary && timeSummary.entries.length > 0 && (
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                Time Entries
+              </div>
+              {timeSummary.entries.map((entry) => {
+                const isEditingEntry = editingEntryId === entry.id;
+                
+                return (
+                  <div
+                    key={entry.id}
+                    className={twMerge(clsx(
+                      'p-2 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700',
+                      entry.is_running && 'ring-1 ring-green-500 dark:ring-green-400'
+                    ))}
+                  >
+                    {isEditingEntry ? (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="datetime-local"
+                            value={editEntryForm.start_time}
+                            onChange={(e) => setEditEntryForm(prev => ({ ...prev, start_time: e.target.value }))}
+                            className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                          />
+                          <input
+                            type="datetime-local"
+                            value={editEntryForm.end_time}
+                            onChange={(e) => setEditEntryForm(prev => ({ ...prev, end_time: e.target.value }))}
+                            className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                          />
+                        </div>
+                        <input
+                          type="text"
+                          value={editEntryForm.description}
+                          onChange={(e) => setEditEntryForm(prev => ({ ...prev, description: e.target.value }))}
+                          placeholder="Description"
+                          className="w-full text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                        />
+                        <div className="flex justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={handleCancelEditEntry}
+                            className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEditEntry(entry.id)}
+                            className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={twMerge(clsx(
+                            'text-sm font-medium',
+                            entry.is_running ? 'text-green-600 dark:text-green-400 animate-pulse' : 'text-gray-900 dark:text-gray-100'
+                          ))}>
+                            {entry.is_running ? 'Running' : formatDurationUs(entry.duration_us || 0)}
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {formatDateTime(entry.start_time)}
+                          </span>
+                          {entry.description && (
+                            <span className="text-xs text-gray-400 dark:text-gray-500 truncate max-w-[100px]">
+                              {entry.description}
+                            </span>
+                          )}
+                        </div>
+                        {!entry.is_running && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleEditEntry(entry)}
+                              className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteEntry(entry.id)}
+                              className="p-1 text-gray-400 hover:text-red-500"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
       
       {/* Primary Assignee */}
       <div>

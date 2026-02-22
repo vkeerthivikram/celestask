@@ -19,3 +19,5 @@ server/data/*.db
 # Next.js build artifacts
 client/.next/
 client/next-env.d.ts
+
+*.tsbuildinfo

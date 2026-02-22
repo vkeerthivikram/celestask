@@ -15,6 +15,7 @@ const notesRouter = require('./routes/notes');
 const customFieldsRouter = require('./routes/customFields');
 const savedViewsRouter = require('./routes/savedViews');
 const importExportRouter = require('./routes/importExport');
+const timeEntriesRouter = require('./routes/timeEntries');
 
 // Initialize Express app
 const app = express();
@@ -54,6 +55,7 @@ app.use('/api/custom-fields', customFieldsRouter);
 app.use('/api/saved-views', savedViewsRouter);
 app.use('/api/export', importExportRouter);
 app.use('/api/import', importExportRouter);
+app.use('/api/time-entries', timeEntriesRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

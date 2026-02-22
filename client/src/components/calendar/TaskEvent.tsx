@@ -5,7 +5,7 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import type { Task, TaskPriority } from '../../types';
 import { PRIORITY_CONFIG } from '../../types';
-import { AppContextMenu } from '../common/AppContextMenu';
+import { AppContextMenu, type AppContextMenuItem } from '../common/AppContextMenu';
 
 interface TaskEventProps {
   task: Task;
@@ -54,8 +54,8 @@ export function TaskEvent({ task, onClick, onCreateSubTask, onDelete }: TaskEven
     setContextMenuPosition(null);
   };
 
-  const contextMenuItems = useMemo(() => {
-    const items = [
+  const contextMenuItems = useMemo((): AppContextMenuItem[] => {
+    const items: AppContextMenuItem[] = [
       {
         id: 'open-task',
         label: 'Open task',

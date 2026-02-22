@@ -5,7 +5,7 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import type { Task, TaskStatus, TaskPriority } from '../../types';
 import { STATUS_CONFIG, PRIORITY_CONFIG } from '../../types';
-import { AppContextMenu } from '../common/AppContextMenu';
+import { AppContextMenu, type AppContextMenuItem } from '../common/AppContextMenu';
 
 interface TimelineTaskProps {
   task: Task;
@@ -59,8 +59,8 @@ export function TimelineTask({ task, left, width, onClick, onCreateSubTask, onDe
     setContextMenuPosition(null);
   };
 
-  const contextMenuItems = useMemo(() => {
-    const items = [
+  const contextMenuItems = useMemo((): AppContextMenuItem[] => {
+    const items: AppContextMenuItem[] = [
       {
         id: 'open-task',
         label: 'Open task',

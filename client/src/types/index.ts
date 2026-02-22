@@ -536,3 +536,92 @@ export interface ImportResult {
   }>;
   totalErrors?: number;
 }
+
+// ==================== v2.2.0 Time Tracking ====================
+
+// Time Entry Entity Type
+export type TimeEntityType = 'task' | 'project';
+
+// Time Entry Interface
+export interface TimeEntry {
+  id: string;
+  entity_type: TimeEntityType;
+  entity_id: string;
+  person_id?: string | null;
+  person_name?: string;
+  person_email?: string;
+  description?: string | null;
+  start_time: string;
+  end_time?: string | null;
+  duration_us?: number | null;
+  is_running: boolean;
+  created_at: string;
+  updated_at: string;
+  entity_name?: string; // For running timers list
+  current_session_us?: number; // For running timers
+}
+
+// Task Time Summary
+export interface TaskTimeSummary {
+  task_id: string;
+  direct_time_us: number;
+  children_time_us: number;
+  total_time_us: number;
+  current_session_us: number;
+  has_running_timer: boolean;
+  running_timer: TimeEntry | null;
+  entries: TimeEntry[];
+  children_time_breakdown: Array<{
+    task_id: number;
+    task_title: string;
+    total_us: number;
+    entry_count: number;
+  }>;
+}
+
+// Project Time Summary
+export interface ProjectTimeSummary {
+  project_id: string;
+  direct_time_us: number;
+  tasks_time_us: number;
+  subprojects_time_us: number;
+  total_time_us: number;
+  current_session_us: number;
+  has_running_timer: boolean;
+  running_timer: TimeEntry | null;
+  entries: TimeEntry[];
+  tasks_time_breakdown: Array<{
+    task_id: number;
+    task_title: string;
+    total_us: number;
+  }>;
+  subprojects_time_breakdown: Array<{
+    project_id: number;
+    project_name: string;
+    total_us: number;
+  }>;
+}
+
+// Create Time Entry DTO (for manual entries)
+export interface CreateTimeEntryDTO {
+  person_id?: string | null;
+  description?: string | null;
+  start_time: string;
+  end_time?: string | null;
+  duration_us?: number | null;
+}
+
+// Start Timer DTO
+export interface StartTimerDTO {
+  person_id?: string | null;
+  description?: string | null;
+}
+
+// Update Time Entry DTO
+export interface UpdateTimeEntryDTO {
+  person_id?: string | null;
+  description?: string | null;
+  start_time?: string;
+  end_time?: string | null;
+  duration_us?: number | null;
+}

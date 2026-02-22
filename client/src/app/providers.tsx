@@ -12,6 +12,7 @@ import { ShortcutProvider } from '@/context/ShortcutContext';
 import { CommandPaletteProvider } from '@/context/CommandPaletteContext';
 import { CustomFieldProvider } from '@/context/CustomFieldContext';
 import { SavedViewProvider } from '@/context/SavedViewContext';
+import { TimeEntryProvider } from '@/context/TimeEntryContext';
 import { useProjects } from '@/context/ProjectContext';
 
 // TaskProviderWrapper provides TaskProvider scoped to the current project
@@ -34,13 +35,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
               <ShortcutProvider>
                 <CommandPaletteProvider>
                   <CustomFieldProvider>
-                    <TaskProviderWrapper>
-                      <SavedViewProvider>
-                        <NoteProvider>
-                          {children}
-                        </NoteProvider>
-                      </SavedViewProvider>
-                    </TaskProviderWrapper>
+                    <TimeEntryProvider>
+                      <TaskProviderWrapper>
+                        <SavedViewProvider>
+                          <NoteProvider>
+                            {children}
+                          </NoteProvider>
+                        </SavedViewProvider>
+                      </TaskProviderWrapper>
+                    </TimeEntryProvider>
                   </CustomFieldProvider>
                 </CommandPaletteProvider>
               </ShortcutProvider>

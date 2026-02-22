@@ -7,7 +7,7 @@ import { Calendar, AlertCircle, Pencil, Trash2, ChevronRight, Plus } from 'lucid
 import type { Task } from '../../types';
 import { StatusBadge, PriorityBadge } from '../common/Badge';
 import { Button } from '../common/Button';
-import { AppContextMenu } from '../common/AppContextMenu';
+import { AppContextMenu, type AppContextMenuItem } from '../common/AppContextMenu';
 
 interface TaskListItemProps {
   task: Task;
@@ -79,8 +79,8 @@ export function TaskListItem({ task, onEdit, onDelete, onCreateSubTask, isOverdu
     setContextMenuPosition(null);
   };
 
-  const contextMenuItems = useMemo(() => {
-    const items = [
+  const contextMenuItems = useMemo((): AppContextMenuItem[] => {
+    const items: AppContextMenuItem[] = [
       {
         id: 'edit-task',
         label: 'Edit task',

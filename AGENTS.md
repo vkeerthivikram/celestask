@@ -92,6 +92,7 @@ celestask/
 │       ├── notes.js             # Notes API (5 endpoints)
 │       ├── customFields.js      # Custom Fields API (5 endpoints)
 │       ├── savedViews.js        # Saved Views API (6 endpoints)
+│       ├── timeEntries.js       # Time Entries API (16 endpoints)
 │       └── importExport.js      # Import/Export API (4 endpoints)
 │
 └── client/                      # Frontend Next.js application
@@ -128,7 +129,10 @@ celestask/
         ├── hooks/
         │   └── useKeyboardShortcuts.ts  # Keyboard shortcut hook
         │
-        ├── context/             # React Context providers (11 contexts)
+        ├── utils/
+        │   └── timeFormat.ts    # Time formatting utilities (microsecond precision)
+        │
+        ├── context/             # React Context providers (12 contexts)
         │   ├── AppContext.tsx
         │   ├── ToastContext.tsx
         │   ├── ProjectContext.tsx
@@ -139,7 +143,8 @@ celestask/
         │   ├── CustomFieldContext.tsx
         │   ├── SavedViewContext.tsx
         │   ├── ShortcutContext.tsx
-        │   └── CommandPaletteContext.tsx
+        │   ├── CommandPaletteContext.tsx
+        │   └── TimeEntryContext.tsx
         │
         └── components/
             ├── ui/              # UI components (6 files)
@@ -150,7 +155,7 @@ celestask/
             │   └── dropdown-menu.tsx
             │   └── Logo.tsx
             │
-            ├── common/          # Reusable components (32 files)
+            ├── common/          # Reusable components (34 files)
             │   ├── Button.tsx, Card.tsx, Badge.tsx, Modal.tsx
             │   ├── AppContextMenu.tsx
             │   ├── ProgressBar.tsx
@@ -167,6 +172,7 @@ celestask/
             │   ├── Breadcrumbs.tsx
             │   ├── ShortcutHelp.tsx
             │   ├── NoteCard.tsx, NoteEditor.tsx, NotesPanel.tsx
+            │   ├── TimeTracker.tsx, TimeEntryList.tsx
             │   └── ImportExportPanel.tsx
             │
             ├── layout/          # Layout components (3 files)
@@ -235,7 +241,7 @@ All commands are run from the repository root:
 
 ## 5. Server Architecture
 
-### 5.1 Database Schema (11 Tables)
+### 5.1 Database Schema (12 Tables)
 
 #### 1. projects
 | Column | Type | Constraints | Default |
@@ -394,7 +400,24 @@ All commands are run from the repository root:
 
 **Indexes**: `idx_saved_views_project`, `idx_saved_views_type`
 
-### 5.2 API Routes (73 Endpoints Total)
+#### 12. time_entries
+| Column | Type | Constraints | Default |
+|--------|------|-------------|---------|
+| id | TEXT | PRIMARY KEY | UUID |
+| entity_type | TEXT | NOT NULL, CHECK(entity_type IN ('task', 'project')) | - |
+| entity_id | TEXT | NOT NULL | - |
+| person_id | TEXT | REFERENCES people(id) ON DELETE SET NULL | NULL |
+| description | TEXT | - | NULL |
+| start_time | DATETIME | NOT NULL | - |
+| end_time | DATETIME | - | NULL |
+| duration_us | INTEGER | - | NULL |
+| is_running | INTEGER | - | 0 |
+| created_at | DATETIME | - | CURRENT_TIMESTAMP |
+| updated_at | DATETIME | - | CURRENT_TIMESTAMP |
+
+**Indexes**: `idx_time_entries_entity(entity_type, entity_id)`, `idx_time_entries_person`, `idx_time_entries_running`
+
+### 5.2 API Routes (89 Endpoints Total)
 
 #### Projects API (14 endpoints)
 
@@ -505,6 +528,25 @@ All commands are run from the repository root:
 | GET | `/api/export/status` | Get database statistics | `{ version, tableStats, totalRecords }` |
 | POST | `/api/import` | Import data | `?mode=merge|replace`, Body: ImportPayload |
 
+#### Time Entries API (16 endpoints)
+
+| Method | Endpoint | Description | Query Params / Request Body |
+|--------|----------|-------------|----------------------------|
+| GET | `/api/time-entries/task/:taskId` | Get all time entries for task | - |
+| GET | `/api/time-entries/task/:taskId/summary` | Get time summary with subtask rollup | - |
+| POST | `/api/time-entries/task/:taskId/start` | Start task timer | `{ person_id?, description? }` |
+| POST | `/api/time-entries/task/:taskId/stop` | Stop task timer | - |
+| POST | `/api/time-entries/task/:taskId` | Add manual time entry | `{ start_time, end_time?, duration_us?, description? }` |
+| GET | `/api/time-entries/project/:projectId` | Get all time entries for project | - |
+| GET | `/api/time-entries/project/:projectId/summary` | Get time summary with rollup | - |
+| POST | `/api/time-entries/project/:projectId/start` | Start project timer | `{ person_id?, description? }` |
+| POST | `/api/time-entries/project/:projectId/stop` | Stop project timer | - |
+| POST | `/api/time-entries/project/:projectId` | Add manual time entry | `{ start_time, end_time?, duration_us?, description? }` |
+| GET | `/api/time-entries/running` | Get all running timers | - |
+| POST | `/api/time-entries/stop-all` | Stop all running timers | - |
+| PUT | `/api/time-entries/:id` | Update time entry | `{ start_time?, end_time?, description? }` |
+| DELETE | `/api/time-entries/:id` | Delete time entry | - |
+
 #### Health Check
 
 | Method | Endpoint | Description | Response |
@@ -550,7 +592,7 @@ All commands are run from the repository root:
 
 **View types**: `kanban`, `list`, `calendar`, `timeline`, `dashboard`
 
-### 6.2 Context Providers (11 Contexts)
+### 6.2 Context Providers (12 Contexts)
 
 **Provider Hierarchy** (from `app/providers.tsx`):
 ```
@@ -565,6 +607,7 @@ AppProvider
                 → TaskProvider (scoped to current project)
                   → SavedViewProvider
                     → NoteProvider
+                      → TimeEntryProvider
 ```
 
 #### 1. AppContext (`context/AppContext.tsx`)
@@ -767,6 +810,29 @@ AppProvider
 
 **Hook**: `useCommandPalette()`
 
+#### 12. TimeEntryContext (`context/TimeEntryContext.tsx`)
+**Purpose**: Time tracking state management
+
+**State**:
+- `runningTimers: TimeEntry[]` - All currently running timers
+- `taskTimeSummaries: Map<string, TaskTimeSummary>` - Cached task summaries
+- `projectTimeSummaries: Map<string, ProjectTimeSummary>` - Cached project summaries
+- `timerTick: number` - Counter for UI updates every second
+
+**Actions**:
+- `startTaskTimer(taskId, data?)`, `stopTaskTimer(taskId)` - Task timer control
+- `startProjectTimer(projectId, data?)`, `stopProjectTimer(projectId)` - Project timer control
+- `addManualTaskTimeEntry(taskId, data)`, `addManualProjectTimeEntry(projectId, data)` - Manual entries
+- `updateTimeEntry(entryId, data)`, `deleteTimeEntry(entryId)` - Entry management
+- `fetchTaskTimeSummary(taskId)`, `fetchProjectTimeSummary(projectId)` - Get summaries
+- `stopAllRunningTimers()` - Stop all timers
+
+**Helpers**:
+- `isTaskTimerRunning(taskId)`, `isProjectTimerRunning(projectId)`
+- `getRunningTimerForTask(taskId)`, `getRunningTimerForProject(projectId)`
+
+**Hook**: `useTimeEntries()`
+
 ### 6.3 API Service Layer
 
 File: `client/src/services/api.ts`
@@ -791,6 +857,7 @@ buildQueryString(filters?: TaskFilters): string
 | Notes | `getNotes`, `getNote`, `createNote`, `updateNote`, `deleteNote` |
 | Custom Fields | `getCustomFields`, `getCustomField`, `createCustomField`, `updateCustomField`, `deleteCustomField` |
 | Saved Views | `getSavedViews`, `getSavedView`, `createSavedView`, `updateSavedView`, `deleteSavedView`, `setDefaultView` |
+| Time Entries | `getTaskTimeEntries`, `getTaskTimeSummary`, `startTaskTimer`, `stopTaskTimer`, `createTaskTimeEntry`, `getProjectTimeEntries`, `getProjectTimeSummary`, `startProjectTimer`, `stopProjectTimer`, `createProjectTimeEntry`, `updateTimeEntry`, `deleteTimeEntry`, `getRunningTimers`, `stopAllTimers` |
 | Import/Export | `exportData`, `exportSqlite`, `getExportStatus`, `importData` |
 
 **Unified Export**:
@@ -843,6 +910,12 @@ type ImportMode = 'merge' | 'replace'
 - `CreateSavedViewDTO`, `UpdateSavedViewDTO`
 - `BulkUpdateDTO`
 
+**Time Tracking Types**:
+- `TimeEntry` - Time entry record with `duration_us` (microseconds)
+- `TaskTimeSummary` - Task time summary with `total_duration_us`, `subtasks_duration_us`
+- `ProjectTimeSummary` - Project time summary with `total_duration_us`, `tasks_duration_us`, `subprojects_duration_us`
+- `CreateTimeEntryDTO`, `UpdateTimeEntryDTO`, `StartTimerDTO`
+
 **Utility Types**:
 - `TreeNode<T>` - Generic tree structure
 - `TaskFilters` - Filter configuration
@@ -888,7 +961,7 @@ useKeyboardShortcuts({
 All context hooks follow the pattern `use[ContextName]()`:
 - `useApp()`, `useToast()`, `useProjects()`, `useTasks()`
 - `usePeople()`, `useTags()`, `useNotes()`, `useCustomFields()`
-- `useSavedViews()`, `useShortcuts()`, `useCommandPalette()`
+- `useSavedViews()`, `useShortcuts()`, `useCommandPalette()`, `useTimeEntries()`
 
 ### 6.6 Components (51 Components)
 
@@ -918,6 +991,7 @@ Located in `components/common/`:
 | **Feedback** | `Toast.tsx`, `ToastContainer.tsx`, `ShortcutHelp.tsx` |
 | **Navigation** | `Breadcrumbs.tsx`, `BulkActionBar.tsx` |
 | **Notes** | `NoteCard.tsx`, `NoteEditor.tsx`, `NotesPanel.tsx` |
+| **Time Tracking** | `TimeTracker.tsx`, `TimeEntryList.tsx` |
 | **Data** | `ImportExportPanel.tsx` |
 
 #### Layout Components (3 files)
@@ -1286,6 +1360,41 @@ module.exports = {
 - Added reusable logo component (`components/ui/Logo.tsx`) and wired branding in `Header`/`Sidebar`
 - Added app icon at `app/icon.svg` using the same moon-over-sun identity
 
+### v2.2.0 - Time Tracking (2026-02-22)
+- Added real-time time tracking with persistent timers
+- Play/Stop timer buttons on task cards (Kanban and List views)
+- Timer support for projects in sidebar
+- Time rollup: tasks include subtasks, projects include tasks and subprojects
+- Manual time entry support
+- Editable time entries (start time, end time, description)
+- Timers persist across page reloads and browser closes
+
+**Database Changes**:
+- Created `time_entries` table for storing time records
+
+**New Files**:
+- `server/routes/timeEntries.js` - Time tracking API routes
+- `client/src/context/TimeEntryContext.tsx` - Time tracking state
+- `client/src/components/common/TimeTracker.tsx` - Timer component
+- `client/src/components/common/TimeEntryList.tsx` - Entry list component
+
+**API Changes**:
+- Added `/api/time-entries/*` endpoints for time tracking
+
+### v2.3.0 - Microsecond Precision Time Tracking (2026-02-22)
+- Changed duration storage from minutes to microseconds for higher precision
+- Duration now supports range from microseconds (μs) up to years
+- Added centralized time formatting utility (`client/src/utils/timeFormat.ts`)
+- Flexible duration input: "1h 30m", "2d", "500ms", "1y 6mo", etc.
+
+**Database Changes**:
+- Renamed `duration_minutes` to `duration_us` in `time_entries` table
+- Migration automatically converts existing data (multiplies by 60,000,000)
+
+**API Changes**:
+- All time entry endpoints now return/accept `*_us` fields instead of `*_minutes`
+- Backward compatible: `duration_minutes` in request body is converted to microseconds
+
 ---
 
 ## 12. Import/Export Format
@@ -1293,8 +1402,8 @@ module.exports = {
 ### Export Payload Structure
 ```typescript
 {
-  version: "1.6.0",
-  exportedAt: "2026-02-20T...",
+  version: "2.3.0",
+  exportedAt: "2026-02-22T...",
   data: {
     projects: Project[],
     people: Person[],
@@ -1306,7 +1415,8 @@ module.exports = {
     notes: Note[],
     custom_fields: CustomField[],
     custom_field_values: CustomFieldValue[],
-    saved_views: SavedView[]
+    saved_views: SavedView[],
+    time_entries: TimeEntry[]
   }
 }
 ```
@@ -1327,3 +1437,4 @@ module.exports = {
 9. custom_fields
 10. custom_field_values
 11. saved_views
+12. time_entries

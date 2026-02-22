@@ -3,10 +3,9 @@
 import React, { useMemo, useState } from 'react';
 import type { TreeNode } from '../../types';
 import type { Task } from '../../types';
-import { TreeNodeRenderer } from './TreeView';
-import { MiniProgressBar } from './ProgressBar';
 import { STATUS_CONFIG } from '../../types';
-import { AppContextMenu } from './AppContextMenu';
+import { TreeNodeRenderer } from './TreeView';
+import { AppContextMenu, type AppContextMenuItem } from './AppContextMenu';
 
 interface TaskTreeNodeProps {
   node: TreeNode<Task>;
@@ -18,7 +17,6 @@ interface TaskTreeNodeProps {
   onCreateSubTask?: (parentId: number) => void;
   onEditTask?: (task: Task) => void;
   onDeleteTask?: (task: Task) => void;
-  showProgress?: boolean;
 }
 
 export function TaskTreeNode({
@@ -31,17 +29,19 @@ export function TaskTreeNode({
   onCreateSubTask,
   onEditTask,
   onDeleteTask,
-  showProgress = true,
 }: TaskTreeNodeProps) {
   const task = node.data;
   const hasChildren = node.children.length > 0;
-  const statusConfig = STATUS_CONFIG[task.status];
-  const progress = task.progress_percent ?? 0;
   const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  
+  // Get status info
+  const statusConfig = STATUS_CONFIG[task.status];
+  const assignee = task.assignee;
+  const assigneeInitial = assignee?.name?.charAt(0)?.toUpperCase() || '?';
 
-  const handleContextMenu = (event: React.MouseEvent) => {
-    event.preventDefault();
-    setContextMenuPosition({ x: event.clientX, y: event.clientY });
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenuPosition({ x: e.clientX, y: e.clientY });
   };
 
   const handleKeyboardContextMenu = (element: HTMLDivElement) => {
@@ -53,8 +53,8 @@ export function TaskTreeNode({
     setContextMenuPosition(null);
   };
 
-  const contextMenuItems = useMemo(() => {
-    const items = [
+  const contextMenuItems = useMemo((): AppContextMenuItem[] => {
+    const items: AppContextMenuItem[] = [
       {
         id: 'open-task',
         label: 'Open task',
@@ -89,22 +89,6 @@ export function TaskTreeNode({
 
     return items;
   }, [onCreateSubTask, onDeleteTask, onEditTask, onSelect, task]);
-
-  const label = (
-    <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-      <div className="flex items-center gap-2">
-        <span
-          className="w-2 h-2 rounded-full flex-shrink-0"
-          style={{ backgroundColor: statusConfig.color }}
-          title={statusConfig.label}
-        />
-        <span className="truncate text-sm">{task.title}</span>
-      </div>
-      {showProgress && progress > 0 && (
-        <MiniProgressBar percent={progress} className="ml-4" />
-      )}
-    </div>
-  );
 
   const actions = (
     <>
@@ -159,19 +143,41 @@ export function TaskTreeNode({
     </>
   );
 
+  // Build label with status indicator and optional assignee
+  const labelContent = (
+    <div className="flex items-center gap-2">
+      <div 
+        className="w-2 h-2 rounded-full flex-shrink-0"
+        style={{ backgroundColor: statusConfig.color }}
+        title={statusConfig.label}
+      />
+      <span className="truncate">{task.title}</span>
+      {assignee && (
+        <div 
+          className="w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0"
+          title={assignee.name}
+        >
+          <span className="text-primary-600 dark:text-primary-400 text-xs font-medium">
+            {assigneeInitial}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <>
       <TreeNodeRenderer
         depth={depth}
         isExpanded={isExpanded}
-        hasChildren={hasChildren}
         onToggle={onToggle}
-        label={label}
         isSelected={isSelected}
         onClick={() => onSelect(task)}
         onContextMenu={handleContextMenu}
         onKeyboardContextMenu={handleKeyboardContextMenu}
         actions={actions}
+        label={labelContent}
+        hasChildren={hasChildren}
       />
       <AppContextMenu
         open={Boolean(contextMenuPosition)}

@@ -7,7 +7,7 @@ import { format, differenceInDays, isPast, isToday, isTomorrow } from 'date-fns'
 import { Calendar, AlertCircle, CheckCircle } from 'lucide-react';
 import type { Task } from '../../types';
 import { PRIORITY_CONFIG, STATUS_CONFIG } from '../../types';
-import { AppContextMenu } from '../common/AppContextMenu';
+import { AppContextMenu, type AppContextMenuItem } from '../common/AppContextMenu';
 
 interface UpcomingDeadlinesProps {
   tasks: Task[];
@@ -91,7 +91,7 @@ export function UpcomingDeadlines({ tasks, onTaskClick, onCreateSubTask, onDelet
     }
 
     const { task } = contextMenuState;
-    const items = [
+    const items: AppContextMenuItem[] = [
       {
         id: 'open-task',
         label: 'Open task',

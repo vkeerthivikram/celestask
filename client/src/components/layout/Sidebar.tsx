@@ -18,7 +18,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { useProjects } from '../../context/ProjectContext';
 import type { Project, ViewType } from '../../types';
-import { AppContextMenu } from '../common/AppContextMenu';
+import { AppContextMenu, type AppContextMenuItem } from '../common/AppContextMenu';
 import { Logo } from '../ui/Logo';
 
 interface SidebarProps {
@@ -83,7 +83,7 @@ export function Sidebar({ onAddProject }: SidebarProps) {
     await deleteProject(project.id);
   };
 
-  const contextMenuItems = useMemo(() => {
+  const contextMenuItems = useMemo((): AppContextMenuItem[] => {
     if (!contextMenuState) {
       return [];
     }

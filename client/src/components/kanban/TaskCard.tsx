@@ -1,16 +1,18 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format } from 'date-fns';
-import { Calendar, Users, GitBranch, Plus } from 'lucide-react';
+import { Calendar, Users, GitBranch, Plus, Clock, Play, Square } from 'lucide-react';
 import type { Task, TaskPriority } from '../../types';
 import { PriorityBadge, TagBadge } from '../common/Badge';
 import { MiniProgressBar } from '../common/ProgressBar';
-import { AppContextMenu } from '../common/AppContextMenu';
+import { AppContextMenu, type AppContextMenuItem } from '../common/AppContextMenu';
+import { useTimeEntries } from '@/context/TimeEntryContext';
+import { formatDurationUsCompact, formatTimerDisplayUs } from '@/utils/timeFormat';
 
 interface TaskCardProps {
   task: Task;
@@ -28,6 +30,51 @@ const priorityColors: Record<TaskPriority, string> = {
 
 export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onCreateSubTask, onDelete }) => {
   const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [totalUs, setTotalUs] = useState(0);
+  const [isTimerLoading, setIsTimerLoading] = useState(false);
+  
+  const {
+    timerTick,
+    startTaskTimer,
+    stopTaskTimer,
+    isTaskTimerRunning,
+    getRunningTimerForTask,
+    fetchTaskTimeSummary,
+  } = useTimeEntries();
+  
+  const isRunning = isTaskTimerRunning(task.id);
+  const runningTimer = getRunningTimerForTask(task.id);
+  
+  useEffect(() => {
+    const fetchTime = async () => {
+      try {
+        const summary = await fetchTaskTimeSummary(task.id);
+        setTotalUs(summary.total_time_us);
+      } catch (err) {
+        console.error('Failed to fetch task time:', err);
+      }
+    };
+    fetchTime();
+  }, [task.id, fetchTaskTimeSummary, runningTimer]);
+  
+  const handleTimerClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsTimerLoading(true);
+    try {
+      if (isRunning) {
+        await stopTaskTimer(task.id);
+        const summary = await fetchTaskTimeSummary(task.id);
+        setTotalUs(summary.total_time_us);
+      } else {
+        await startTaskTimer(task.id);
+      }
+    } catch (err) {
+      console.error('Timer action failed:', err);
+    } finally {
+      setIsTimerLoading(false);
+    }
+  };
+  
   const {
     attributes,
     listeners,
@@ -74,8 +121,8 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onCreateSubTa
     setContextMenuPosition(null);
   };
 
-  const contextMenuItems = useMemo(() => {
-    const items = [
+  const contextMenuItems = useMemo((): AppContextMenuItem[] => {
+    const items: AppContextMenuItem[] = [
       {
         id: 'open-task',
         label: 'Open task',
@@ -150,6 +197,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onCreateSubTa
           'hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600',
           'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900',
           'hover:-translate-y-0.5',
+          isRunning && 'ring-1 ring-green-500 dark:ring-green-400',
           isDragging && [
             'opacity-50 scale-[1.02] rotate-[2deg]',
             'shadow-xl border-primary-400 dark:border-primary-500',
@@ -235,6 +283,32 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onCreateSubTa
         <div className="flex flex-wrap items-center gap-2">
           {/* Priority badge */}
           <PriorityBadge priority={task.priority} size="sm" />
+
+          {/* Timer button */}
+          <button
+            onClick={handleTimerClick}
+            disabled={isTimerLoading}
+            className={twMerge(clsx(
+              'flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors',
+              isRunning 
+                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600',
+              isTimerLoading && 'opacity-50 cursor-wait'
+            ))}
+            title={isRunning ? 'Stop timer' : 'Start timer'}
+          >
+            {isRunning ? (
+              <>
+                <Square className="w-2.5 h-2.5" />
+                {runningTimer && formatTimerDisplayUs(runningTimer.start_time)}
+              </>
+            ) : (
+              <>
+                <Play className="w-2.5 h-2.5" />
+                {totalUs > 0 ? formatDurationUsCompact(totalUs) : 'Start'}
+              </>
+            )}
+          </button>
 
           {/* End/Due date */}
           {displayDate && (

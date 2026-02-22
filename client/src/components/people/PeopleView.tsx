@@ -10,7 +10,7 @@ import type { Person, CreatePersonDTO, UpdatePersonDTO } from '../../types';
 import { Modal, ConfirmModal } from '../common/Modal';
 import { PersonForm } from '../common/PersonForm';
 import { Button } from '../common/Button';
-import { AppContextMenu } from '../common/AppContextMenu';
+import { AppContextMenu, type AppContextMenuItem } from '../common/AppContextMenu';
 
 export function PeopleView() {
   const { people, loading, error, createPerson, updatePerson, deletePerson } = usePeople();

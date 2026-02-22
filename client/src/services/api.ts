@@ -39,6 +39,12 @@ import type {
   ImportPayload,
   ImportResult,
   ImportMode,
+  TimeEntry,
+  TaskTimeSummary,
+  ProjectTimeSummary,
+  CreateTimeEntryDTO,
+  StartTimerDTO,
+  UpdateTimeEntryDTO,
 } from '../types';
 
 const API_BASE_URL = '/api';
@@ -753,6 +759,148 @@ export async function importData(data: ImportPayload, mode: ImportMode): Promise
   return handleResponse<ImportResult>(response);
 }
 
+// ============ Time Entries API ============
+
+/**
+ * Get all time entries for a task
+ */
+export async function getTaskTimeEntries(taskId: number | string): Promise<TimeEntry[]> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/task/${taskId}`);
+  return handleResponse<TimeEntry[]>(response);
+}
+
+/**
+ * Get time summary for a task (includes subtask rollup)
+ */
+export async function getTaskTimeSummary(taskId: number | string): Promise<TaskTimeSummary> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/task/${taskId}/summary`);
+  return handleResponse<TaskTimeSummary>(response);
+}
+
+/**
+ * Start a timer for a task
+ */
+export async function startTaskTimer(taskId: number | string, data?: StartTimerDTO): Promise<TimeEntry> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/task/${taskId}/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data || {}),
+  });
+  return handleResponse<TimeEntry>(response);
+}
+
+/**
+ * Stop the running timer for a task
+ */
+export async function stopTaskTimer(taskId: number | string): Promise<TimeEntry> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/task/${taskId}/stop`, {
+    method: 'POST',
+  });
+  return handleResponse<TimeEntry>(response);
+}
+
+/**
+ * Add a manual time entry for a task
+ */
+export async function createTaskTimeEntry(taskId: number | string, data: CreateTimeEntryDTO): Promise<TimeEntry> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/task/${taskId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<TimeEntry>(response);
+}
+
+/**
+ * Get all time entries for a project
+ */
+export async function getProjectTimeEntries(projectId: number | string): Promise<TimeEntry[]> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/project/${projectId}`);
+  return handleResponse<TimeEntry[]>(response);
+}
+
+/**
+ * Get time summary for a project (includes task and subproject rollup)
+ */
+export async function getProjectTimeSummary(projectId: number | string): Promise<ProjectTimeSummary> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/project/${projectId}/summary`);
+  return handleResponse<ProjectTimeSummary>(response);
+}
+
+/**
+ * Start a timer for a project
+ */
+export async function startProjectTimer(projectId: number | string, data?: StartTimerDTO): Promise<TimeEntry> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/project/${projectId}/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data || {}),
+  });
+  return handleResponse<TimeEntry>(response);
+}
+
+/**
+ * Stop the running timer for a project
+ */
+export async function stopProjectTimer(projectId: number | string): Promise<TimeEntry> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/project/${projectId}/stop`, {
+    method: 'POST',
+  });
+  return handleResponse<TimeEntry>(response);
+}
+
+/**
+ * Add a manual time entry for a project
+ */
+export async function createProjectTimeEntry(projectId: number | string, data: CreateTimeEntryDTO): Promise<TimeEntry> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/project/${projectId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<TimeEntry>(response);
+}
+
+/**
+ * Update a time entry
+ */
+export async function updateTimeEntry(entryId: string, data: UpdateTimeEntryDTO): Promise<TimeEntry> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/${entryId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<TimeEntry>(response);
+}
+
+/**
+ * Delete a time entry
+ */
+export async function deleteTimeEntry(entryId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/${entryId}`, {
+    method: 'DELETE',
+  });
+  await handleResponse<{ message: string }>(response);
+}
+
+/**
+ * Get all running timers
+ */
+export async function getRunningTimers(): Promise<TimeEntry[]> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/running`);
+  return handleResponse<TimeEntry[]>(response);
+}
+
+/**
+ * Stop all running timers
+ */
+export async function stopAllTimers(): Promise<{ stopped_count: number; stopped_ids: string[] }> {
+  const response = await fetch(`${API_BASE_URL}/time-entries/stop-all`, {
+    method: 'POST',
+  });
+  return handleResponse<{ stopped_count: number; stopped_ids: string[] }>(response);
+}
+
 // Export all functions as a unified API object
 export const api = {
   projects: {
@@ -842,6 +990,22 @@ export const api = {
     exportSqlite,
     getExportStatus,
     importData,
+  },
+  timeEntries: {
+    getTaskEntries: getTaskTimeEntries,
+    getTaskSummary: getTaskTimeSummary,
+    startTaskTimer,
+    stopTaskTimer,
+    createTaskEntry: createTaskTimeEntry,
+    getProjectEntries: getProjectTimeEntries,
+    getProjectSummary: getProjectTimeSummary,
+    startProjectTimer,
+    stopProjectTimer,
+    createProjectEntry: createProjectTimeEntry,
+    update: updateTimeEntry,
+    delete: deleteTimeEntry,
+    getRunning: getRunningTimers,
+    stopAll: stopAllTimers,
   },
 };
 

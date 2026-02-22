@@ -37,7 +37,7 @@ import { TaskForm } from '../common/TaskForm';
 import { Card } from '../common/Card';
 import StatCard from './StatCard';
 import UpcomingDeadlines from './UpcomingDeadlines';
-import { AppContextMenu } from '../common/AppContextMenu';
+import { AppContextMenu, type AppContextMenuItem } from '../common/AppContextMenu';
 
 // Chart colors
 const CHART_COLORS = {
@@ -187,7 +187,7 @@ export function DashboardView() {
     setContextMenuState(null);
   }, []);
 
-  const contextMenuItems = useMemo(() => {
+  const contextMenuItems = useMemo((): AppContextMenuItem[] => {
     if (!contextMenuState) {
       return [];
     }

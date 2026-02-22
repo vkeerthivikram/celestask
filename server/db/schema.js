@@ -299,6 +299,49 @@ function createTables() {
     console.error('Error creating saved_views table:', error.message);
   }
 
+  // ==================== MIGRATION: Add v2.2.0 Time Tracking ====================
+  
+  // Create time_entries table for task and project time tracking
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS time_entries (
+        id TEXT PRIMARY KEY,
+        entity_type TEXT NOT NULL CHECK (entity_type IN ('task', 'project')),
+        entity_id TEXT NOT NULL,
+        person_id TEXT,
+        description TEXT,
+        start_time DATETIME NOT NULL,
+        end_time DATETIME,
+        duration_us INTEGER,
+        is_running INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (person_id) REFERENCES people(id) ON DELETE SET NULL
+      )
+    `);
+    
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_time_entries_entity ON time_entries(entity_type, entity_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_time_entries_person ON time_entries(person_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_time_entries_running ON time_entries(is_running)`);
+    console.log('Created time_entries table');
+  } catch (error) {
+    console.error('Error creating time_entries table:', error.message);
+  }
+
+  // Migration: Rename duration_minutes to duration_us (microsecond precision)
+  try {
+    const timeEntriesTableInfo = db.prepare('PRAGMA table_info(time_entries)').all();
+    const hasDurationMinutes = timeEntriesTableInfo.some(col => col.name === 'duration_minutes');
+    const hasDurationUs = timeEntriesTableInfo.some(col => col.name === 'duration_us');
+    
+    if (hasDurationMinutes && !hasDurationUs) {
+      db.exec(`ALTER TABLE time_entries RENAME COLUMN duration_minutes TO duration_us`);
+      console.log('Migrated time_entries: renamed duration_minutes to duration_us');
+    }
+  } catch (error) {
+    console.error('Error migrating time_entries duration column:', error.message);
+  }
+
   console.log('Database tables created successfully');
 }
 
