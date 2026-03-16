@@ -49,3 +49,14 @@ yarn-error.log*
 # Build outputs
 dist/
 build/
+# Go build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+server/celestask
+server/celestask-server
+server/server
+*.test
+*.out
+vendor/
