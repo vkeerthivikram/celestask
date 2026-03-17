@@ -1049,3 +1049,155 @@ func stopRunningTimers(database *db.Database, entityType, entityID, excludeID st
 		}
 	}
 }
+
+// GetProjectTimeSummary returns a summary of time entries for a project
+func GetProjectTimeSummary(c *gin.Context) {
+projectID := c.Param("projectId")
+if projectID == "" {
+c.JSON(http.StatusBadRequest, middleware.NewValidationError("projectId is required"))
+return
+}
+
+databaseIface, exists := c.Get("database")
+if !exists {
+c.JSON(http.StatusInternalServerError, middleware.NewInternalError("Database not available"))
+return
+}
+database := databaseIface.(*db.Database)
+
+rows, err := database.Query(`
+SELECT te.id, te.entity_type, te.entity_id, te.person_id, te.description,
+       te.start_time, te.end_time, te.duration_us, te.is_running,
+       te.created_at, te.updated_at,
+       p.name as person_name, p.email as person_email
+FROM time_entries te
+LEFT JOIN people p ON te.person_id = p.id
+WHERE te.entity_type = 'project' AND te.entity_id = ?
+ORDER BY te.start_time DESC
+`, projectID)
+if err != nil {
+c.JSON(http.StatusInternalServerError, middleware.NewFetchError("time summary"))
+return
+}
+
+entries, err := scanTimeEntries(rows)
+if err != nil {
+c.JSON(http.StatusInternalServerError, middleware.NewFetchError("time summary"))
+return
+}
+
+var totalUs int64
+var hasRunningTimer bool
+var runningTimer *TimeEntry
+for _, e := range entries {
+if e.DurationUs != nil {
+totalUs += *e.DurationUs
+}
+if e.IsRunning == 1 {
+hasRunningTimer = true
+runningTimer = &e
+}
+}
+
+var currentSessionUs int64
+if runningTimer != nil {
+currentSessionUs = calculateDurationUs(runningTimer.StartTime, time.Now())
+}
+
+c.JSON(http.StatusOK, middleware.NewSuccessResponse(gin.H{
+"project_id":         projectID,
+"total_time_us":      totalUs,
+"current_session_us": currentSessionUs,
+"has_running_timer":  hasRunningTimer,
+"running_timer":      runningTimer,
+"entries":            entries,
+}))
+}
+
+// GetRunningTimers returns all currently running time entries
+func GetRunningTimers(c *gin.Context) {
+databaseIface, exists := c.Get("database")
+if !exists {
+c.JSON(http.StatusInternalServerError, middleware.NewInternalError("Database not available"))
+return
+}
+database := databaseIface.(*db.Database)
+
+rows, err := database.Query(`
+SELECT te.id, te.entity_type, te.entity_id, te.person_id, te.description,
+       te.start_time, te.end_time, te.duration_us, te.is_running,
+       te.created_at, te.updated_at,
+       p.name as person_name, p.email as person_email
+FROM time_entries te
+LEFT JOIN people p ON te.person_id = p.id
+WHERE te.is_running = 1
+ORDER BY te.start_time DESC
+`)
+if err != nil {
+c.JSON(http.StatusInternalServerError, middleware.NewFetchError("running timers"))
+return
+}
+
+entries, err := scanTimeEntries(rows)
+if err != nil {
+c.JSON(http.StatusInternalServerError, middleware.NewFetchError("running timers"))
+return
+}
+
+if entries == nil {
+entries = []TimeEntry{}
+}
+
+c.JSON(http.StatusOK, middleware.NewSuccessResponse(entries))
+}
+
+// StopAllTimers stops all currently running time entries and returns the count and IDs stopped
+func StopAllTimers(c *gin.Context) {
+databaseIface, exists := c.Get("database")
+if !exists {
+c.JSON(http.StatusInternalServerError, middleware.NewInternalError("Database not available"))
+return
+}
+database := databaseIface.(*db.Database)
+
+// Find all running entries
+rows, err := database.Query(`
+SELECT id, start_time FROM time_entries WHERE is_running = 1
+`)
+if err != nil {
+c.JSON(http.StatusInternalServerError, middleware.NewFetchError("running timers"))
+return
+}
+defer rows.Close()
+
+now := time.Now()
+var stoppedIDs []string
+
+for rows.Next() {
+var id string
+var startTime time.Time
+if err := rows.Scan(&id, &startTime); err != nil {
+continue
+}
+stoppedIDs = append(stoppedIDs, id)
+
+duration := calculateDurationUs(startTime, now)
+_, err = database.Exec(`
+UPDATE time_entries
+SET end_time = ?, duration_us = ?, is_running = 0, updated_at = ?
+WHERE id = ?
+`, now.Format(time.RFC3339Nano), duration, now.Format(time.RFC3339Nano), id)
+if err != nil {
+fmt.Printf("Error stopping timer %s: %v\n", id, err)
+}
+}
+
+if stoppedIDs == nil {
+stoppedIDs = []string{}
+}
+
+c.JSON(http.StatusOK, middleware.NewSuccessResponse(gin.H{
+"stopped_count": len(stoppedIDs),
+"stopped_ids":   stoppedIDs,
+}))
+}

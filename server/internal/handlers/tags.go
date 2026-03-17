@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 
 	"github.com/celestask/server/internal/db"
 	"github.com/celestask/server/internal/middleware"
@@ -124,6 +125,7 @@ func CreateTag(c *gin.Context) {
 	}
 
 	// Validate name is not empty after trimming
+	req.Name = strings.TrimSpace(req.Name)
 	if len(req.Name) == 0 {
 		c.JSON(http.StatusBadRequest, middleware.NewValidationError("Tag name is required"))
 		return

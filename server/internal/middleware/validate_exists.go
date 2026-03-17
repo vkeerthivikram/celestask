@@ -7,23 +7,13 @@ import (
 
 	"github.com/celestask/server/internal/db"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
-// ValidateExists checks if a record exists in the given table
-// Returns the record if found, nil if not found, and any error
-func ValidateExists(database *db.Database, table string, id string) (*sql.Rows, error) {
-	query := fmt.Sprintf("SELECT id FROM %s WHERE id = ?", table)
-	rows, err := database.Query(query, id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		return nil, nil
-	}
-
-	return rows, nil
+// ValidateExists checks if a record exists in the given table.
+// Returns true if the record exists, false if not found, and any error.
+func ValidateExists(database *db.Database, table string, id string) (bool, error) {
+	return recordExists(database, table, id)
 }
 
 // ValidateExistsMiddleware creates middleware that validates an entity exists
@@ -127,34 +117,38 @@ func ValidateRelatedExistsMiddleware(table string, bodyField string, entityName 
 			return
 		}
 
-		// Get the ID from the request body
+		// Use ShouldBindBodyWith so the body can be read again by the handler.
+		var bodyMap map[string]interface{}
+		if err := c.ShouldBindBodyWith(&bodyMap, binding.JSON); err != nil || bodyMap == nil {
+			// Body unreadable or empty – skip validation and let the handler deal with it.
+			c.Next()
+			return
+		}
+
+		val, found := bodyMap[bodyField]
+		if !found || val == nil {
+			// Field absent or null – skip validation.
+			c.Next()
+			return
+		}
+
+		// Accept both string and numeric IDs.
 		var id string
-		if err := c.ShouldBindJSON(&struct {
-			ID string `json:"id"`
-		}{}); err == nil {
-			// Try to get from "id" field first
-			id = c.GetString(bodyField)
+		switch v := val.(type) {
+		case string:
+			id = v
+		case float64:
+			id = fmt.Sprintf("%v", int64(v))
+		default:
+			id = fmt.Sprintf("%v", v)
 		}
 
-		// If not found in body, check if it's a different field
-		if id == "" {
-			var bodyMap map[string]interface{}
-			if err := c.ShouldBindJSON(&bodyMap); err == nil {
-				if val, ok := bodyMap[bodyField]; ok {
-					if valStr, ok := val.(string); ok {
-						id = valStr
-					}
-				}
-			}
-		}
-
-		// Skip if field is not provided or is null/empty
 		if id == "" {
 			c.Next()
 			return
 		}
 
-		exists, err := recordExists(database, table, id)
+		entityExists, err := recordExists(database, table, id)
 		if err != nil {
 			fmt.Printf("Error checking existence in %s: %v\n", table, err)
 			c.JSON(http.StatusInternalServerError, NewInternalError("Failed to validate entity"))
@@ -162,7 +156,7 @@ func ValidateRelatedExistsMiddleware(table string, bodyField string, entityName 
 			return
 		}
 
-		if !exists {
+		if !entityExists {
 			c.JSON(http.StatusBadRequest, NewValidationError(fmt.Sprintf("%s not found", entityName)))
 			c.Abort()
 			return
