@@ -2,7 +2,9 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
+	"strings"
 
 	"github.com/celestask/server/internal/db"
 	"github.com/celestask/server/internal/handlers"
@@ -24,7 +26,33 @@ func main() {
 	}
 
 	// Set up Gin router
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Logger())
+
+	// Custom recovery middleware that maps ErrorResponse panics to the correct HTTP status
+	router.Use(func(c *gin.Context) {
+		defer func() {
+			if err := recover(); err != nil {
+				if apiErr, ok := err.(middleware.ErrorResponse); ok {
+					status := http.StatusInternalServerError
+					switch apiErr.Err.Code {
+					case middleware.CodeNotFound:
+						status = http.StatusNotFound
+					case middleware.CodeValidationError:
+						status = http.StatusBadRequest
+					case middleware.CodeFetchError, middleware.CodeCreateError,
+						middleware.CodeUpdateError, middleware.CodeDeleteError,
+						middleware.CodeInternalError:
+						status = http.StatusInternalServerError
+					}
+					c.AbortWithStatusJSON(status, apiErr)
+					return
+				}
+				c.AbortWithStatusJSON(http.StatusInternalServerError, middleware.NewInternalError("An unexpected error occurred"))
+			}
+		}()
+		c.Next()
+	})
 
 	// Add database middleware to set database in context
 	router.Use(databaseMiddleware(database))
@@ -59,14 +87,27 @@ func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 
-		// Allow localhost:12096 and 127.0.0.1:12096
-		allowedOrigins := []string{
-			"http://localhost:12096",
-			"http://127.0.0.1:12096",
+		// Allow origins configured via ALLOWED_ORIGINS env var (comma-separated),
+		// falling back to localhost defaults for local development.
+		allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+		var origins []string
+		if allowedOrigins != "" {
+			for _, o := range strings.Split(allowedOrigins, ",") {
+				o = strings.TrimSpace(o)
+				if o != "" {
+					origins = append(origins, o)
+				}
+			}
+		}
+		if len(origins) == 0 {
+			origins = []string{
+				"http://localhost:12096",
+				"http://127.0.0.1:12096",
+			}
 		}
 
 		isAllowed := false
-		for _, allowed := range allowedOrigins {
+		for _, allowed := range origins {
 			if origin == allowed {
 				isAllowed = true
 				break
@@ -77,7 +118,7 @@ func corsMiddleware() gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Origin", origin)
 		}
 
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		c.Header("Access-Control-Allow-Credentials", "true")
 
@@ -114,6 +155,10 @@ func setupRoutes(router *gin.Engine) {
 		// Time entries routes (matching Node.js /api/time-entries/ routes)
 		timeEntries := api.Group("/time-entries")
 		{
+			// Running timers (must be registered before /:id to avoid conflicts)
+			timeEntries.GET("/running", handlers.GetRunningTimers)
+			timeEntries.POST("/stop-all", handlers.StopAllTimers)
+
 			// Task time entries
 			timeEntries.GET("/task/:taskId", handlers.GetTaskTimeEntries)
 			timeEntries.POST("/task/:taskId", handlers.CreateTaskTimeEntry)
@@ -126,6 +171,7 @@ func setupRoutes(router *gin.Engine) {
 			timeEntries.POST("/project/:projectId", handlers.CreateProjectTimeEntry)
 			timeEntries.POST("/project/:projectId/start", handlers.StartProjectTimer)
 			timeEntries.POST("/project/:projectId/stop", handlers.StopProjectTimer)
+			timeEntries.GET("/project/:projectId/summary", handlers.GetProjectTimeSummary)
 
 			// Generic time entry operations
 			timeEntries.PUT("/:id", handlers.UpdateTimeEntry)
@@ -134,6 +180,7 @@ func setupRoutes(router *gin.Engine) {
 
 		// Import/Export routes
 		api.GET("/export", handlers.GetExport)
+		api.GET("/export/status", handlers.GetExportStatus)
 		api.GET("/export/sqlite", handlers.GetExportSQLite)
 		api.POST("/import", handlers.PostImport)
 		api.GET("/import/status", handlers.GetImportStatus)
@@ -144,7 +191,7 @@ func setupRoutes(router *gin.Engine) {
 		api.GET("/saved-views/:id", handlers.GetSavedView)
 		api.PUT("/saved-views/:id", handlers.UpdateSavedView)
 		api.DELETE("/saved-views/:id", handlers.DeleteSavedView)
-		api.PUT("/saved-views/:id/set-default", handlers.SetDefaultView)
+		api.PUT("/saved-views/:id/default", handlers.SetDefaultView)
 
 		// People routes
 		api.GET("/people", handlers.GetPeople)

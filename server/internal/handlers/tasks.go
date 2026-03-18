@@ -112,19 +112,19 @@ type CreateTaskRequest struct {
 
 // UpdateTaskRequest represents the request body for updating a task
 type UpdateTaskRequest struct {
-	ProjectID                *int   `json:"project_id"`
-	Title                    string `json:"title"`
-	Description              string `json:"description"`
-	Status                   string `json:"status"`
-	Priority                 string `json:"priority"`
-	DueDate                  string `json:"due_date"`
-	StartDate                string `json:"start_date"`
-	EndDate                  string `json:"end_date"`
-	AssigneeID               string `json:"assignee_id"`
-	ParentTaskID             *int   `json:"parent_task_id"`
-	ProgressPercent          *int   `json:"progress_percent"`
-	EstimatedDurationMinutes *int   `json:"estimated_duration_minutes"`
-	ActualDurationMinutes    *int   `json:"actual_duration_minutes"`
+	ProjectID                *int    `json:"project_id"`
+	Title                    string  `json:"title"`
+	Description              *string `json:"description"`
+	Status                   string  `json:"status"`
+	Priority                 string  `json:"priority"`
+	DueDate                  *string `json:"due_date"`
+	StartDate                *string `json:"start_date"`
+	EndDate                  *string `json:"end_date"`
+	AssigneeID               *string `json:"assignee_id"`
+	ParentTaskID             *int    `json:"parent_task_id"`
+	ProgressPercent          *int    `json:"progress_percent"`
+	EstimatedDurationMinutes *int    `json:"estimated_duration_minutes"`
+	ActualDurationMinutes    *int    `json:"actual_duration_minutes"`
 }
 
 // BulkUpdateRequest represents the request body for bulk updates
@@ -364,20 +364,25 @@ func GetTask(c *gin.Context) {
 		FROM people p 
 		JOIN task_assignees ta ON p.id = ta.person_id 
 		WHERE ta.task_id = ?`, taskID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, middleware.NewFetchError("task assignees"))
+		return
+	}
 	var coAssignees []PersonWithRole
-	if err == nil {
-		defer coAssigneesRows.Close()
-		for coAssigneesRows.Next() {
-			var pwr PersonWithRole
-			var role, assignmentID string
-			coAssigneesRows.Scan(
-				&pwr.ID, &pwr.Name, &pwr.Email, &pwr.Company, &pwr.Designation,
-				&pwr.ProjectID, &pwr.CreatedAt, &pwr.UpdatedAt, &role, &assignmentID,
-			)
-			pwr.Role = role
-			pwr.AssignmentID = assignmentID
-			coAssignees = append(coAssignees, pwr)
+	defer coAssigneesRows.Close()
+	for coAssigneesRows.Next() {
+		var pwr PersonWithRole
+		var role, assignmentID string
+		if err := coAssigneesRows.Scan(
+			&pwr.ID, &pwr.Name, &pwr.Email, &pwr.Company, &pwr.Designation,
+			&pwr.ProjectID, &pwr.CreatedAt, &pwr.UpdatedAt, &role, &assignmentID,
+		); err != nil {
+			c.JSON(http.StatusInternalServerError, middleware.NewFetchError("task assignees"))
+			return
 		}
+		pwr.Role = role
+		pwr.AssignmentID = assignmentID
+		coAssignees = append(coAssignees, pwr)
 	}
 
 	// Get tags
@@ -386,14 +391,19 @@ func GetTask(c *gin.Context) {
 		FROM tags tg 
 		JOIN task_tags tt ON tg.id = tt.tag_id 
 		WHERE tt.task_id = ?`, taskID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, middleware.NewFetchError("task tags"))
+		return
+	}
 	var tags []Tag
-	if err == nil {
-		defer tagsRows.Close()
-		for tagsRows.Next() {
-			var t Tag
-			tagsRows.Scan(&t.ID, &t.Name, &t.Color, &t.ProjectID, &t.CreatedAt, &t.UpdatedAt)
-			tags = append(tags, t)
+	defer tagsRows.Close()
+	for tagsRows.Next() {
+		var t Tag
+		if err := tagsRows.Scan(&t.ID, &t.Name, &t.Color, &t.ProjectID, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			c.JSON(http.StatusInternalServerError, middleware.NewFetchError("task tags"))
+			return
 		}
+		tags = append(tags, t)
 	}
 
 	taskWithRelations := TaskWithRelations{
@@ -451,6 +461,16 @@ func CreateTask(c *gin.Context) {
 	progress := req.ProgressPercent
 	if progress < 0 || progress > 100 {
 		c.JSON(http.StatusBadRequest, middleware.NewValidationError("Progress percent must be between 0 and 100"))
+		return
+	}
+
+	// Reject negative duration values
+	if req.EstimatedDurationMinutes < 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("estimated_duration_minutes cannot be negative"))
+		return
+	}
+	if req.ActualDurationMinutes < 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("actual_duration_minutes cannot be negative"))
 		return
 	}
 
@@ -552,11 +572,11 @@ func UpdateTask(c *gin.Context) {
 		return
 	}
 
-	// Validate parent_task_id if provided (prevent self-reference)
+	// Validate parent_task_id if provided (prevent self-reference and cycles)
 	if req.ParentTaskID != nil {
 		if *req.ParentTaskID != 0 {
-			id, _ := strconv.Atoi(taskID)
-			if *req.ParentTaskID == id {
+			taskIDInt, _ := strconv.Atoi(taskID)
+			if *req.ParentTaskID == taskIDInt {
 				c.JSON(http.StatusBadRequest, middleware.NewValidationError("Task cannot be its own parent"))
 				return
 			}
@@ -565,6 +585,31 @@ func UpdateTask(c *gin.Context) {
 			if err != nil || !parentExists {
 				c.JSON(http.StatusBadRequest, middleware.NewValidationError("Parent task not found"))
 				return
+			}
+			// Check for cycles: new parent must not be a descendant of this task
+			descRows, err := database.Query(`
+				WITH RECURSIVE descendants AS (
+					SELECT id FROM tasks WHERE parent_task_id = ?
+					UNION ALL
+					SELECT t.id FROM tasks t
+					INNER JOIN descendants d ON t.parent_task_id = d.id
+				)
+				SELECT id FROM descendants
+			`, taskIDInt)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, middleware.NewFetchError("descendants"))
+				return
+			}
+			defer descRows.Close()
+			for descRows.Next() {
+				var descendantID int
+				if err := descRows.Scan(&descendantID); err != nil {
+					continue
+				}
+				if descendantID == *req.ParentTaskID {
+					c.JSON(http.StatusBadRequest, middleware.NewValidationError("Parent task is a descendant of this task"))
+					return
+				}
 			}
 		}
 	}
@@ -577,6 +622,16 @@ func UpdateTask(c *gin.Context) {
 		}
 	}
 
+	// Reject negative duration values
+	if req.EstimatedDurationMinutes != nil && *req.EstimatedDurationMinutes < 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("estimated_duration_minutes cannot be negative"))
+		return
+	}
+	if req.ActualDurationMinutes != nil && *req.ActualDurationMinutes < 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("actual_duration_minutes cannot be negative"))
+		return
+	}
+
 	// Build update query dynamically
 	setClauses := []string{"updated_at = CURRENT_TIMESTAMP"}
 	var params []interface{}
@@ -586,9 +641,9 @@ func UpdateTask(c *gin.Context) {
 		params = append(params, strings.TrimSpace(req.Title))
 	}
 
-	if req.Description != "" || c.Request.Body != nil {
+	if req.Description != nil {
 		setClauses = append(setClauses, "description = ?")
-		params = append(params, nullString(req.Description))
+		params = append(params, nullString(*req.Description))
 	}
 
 	if req.Status != "" {
@@ -601,24 +656,24 @@ func UpdateTask(c *gin.Context) {
 		params = append(params, req.Priority)
 	}
 
-	if req.DueDate != "" || req.DueDate == "" {
+	if req.DueDate != nil {
 		setClauses = append(setClauses, "due_date = ?")
-		params = append(params, nullString(req.DueDate))
+		params = append(params, nullString(*req.DueDate))
 	}
 
-	if req.StartDate != "" || req.StartDate == "" {
+	if req.StartDate != nil {
 		setClauses = append(setClauses, "start_date = ?")
-		params = append(params, nullString(req.StartDate))
+		params = append(params, nullString(*req.StartDate))
 	}
 
-	if req.EndDate != "" || req.EndDate == "" {
+	if req.EndDate != nil {
 		setClauses = append(setClauses, "end_date = ?")
-		params = append(params, nullString(req.EndDate))
+		params = append(params, nullString(*req.EndDate))
 	}
 
-	if req.AssigneeID != "" || req.AssigneeID == "" {
+	if req.AssigneeID != nil {
 		setClauses = append(setClauses, "assignee_id = ?")
-		params = append(params, nullString(req.AssigneeID))
+		params = append(params, nullString(*req.AssigneeID))
 	}
 
 	if req.ParentTaskID != nil {

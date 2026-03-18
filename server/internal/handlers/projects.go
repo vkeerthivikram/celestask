@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -266,21 +268,52 @@ func UpdateProject(c *gin.Context) {
 
 	var req UpdateProjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		// If no body, just return the project
-		c.JSON(http.StatusOK, middleware.NewSuccessResponse(existingProject))
+		// Only treat a genuinely empty body as a no-op update
+		if errors.Is(err, io.EOF) {
+			c.JSON(http.StatusOK, middleware.NewSuccessResponse(existingProject))
+			return
+		}
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("Invalid request body"))
 		return
 	}
 
-	// Validate parent_project_id if provided (prevent self-reference)
+	// Validate parent_project_id if provided (prevent self-reference and cycles)
 	if req.ParentProjectID != nil {
-		if *req.ParentProjectID == existingProject.ID {
-			panic(middleware.NewValidationError("Project cannot be its own parent"))
-		}
-		// Check if parent exists
-		var parentProject Project
-		err := database.QueryRow("SELECT id FROM projects WHERE id = ?", *req.ParentProjectID).Scan(&parentProject.ID)
-		if err == sql.ErrNoRows {
-			panic(middleware.NewValidationError("Parent project not found"))
+		newParent := *req.ParentProjectID
+		// 0 means "move to root" – skip existence and cycle checks
+		if newParent != 0 {
+			if newParent == existingProject.ID {
+				panic(middleware.NewValidationError("Project cannot be its own parent"))
+			}
+			// Check if parent exists
+			var parentProject Project
+			err := database.QueryRow("SELECT id FROM projects WHERE id = ?", newParent).Scan(&parentProject.ID)
+			if err == sql.ErrNoRows {
+				panic(middleware.NewValidationError("Parent project not found"))
+			}
+			// Check for circular reference (if new parent is a descendant of this project)
+			descRows, err := database.Query(`
+				WITH RECURSIVE descendants AS (
+					SELECT id FROM projects WHERE parent_project_id = ?
+					UNION ALL
+					SELECT p.id FROM projects p
+					INNER JOIN descendants d ON p.parent_project_id = d.id
+				)
+				SELECT id FROM descendants
+			`, id)
+			if err != nil {
+				panic(middleware.NewFetchError("descendants"))
+			}
+			defer descRows.Close()
+			for descRows.Next() {
+				var descendantID int
+				if err := descRows.Scan(&descendantID); err != nil {
+					continue
+				}
+				if descendantID == newParent {
+					panic(middleware.NewValidationError("Cannot set parent to one of the project's descendants"))
+				}
+			}
 		}
 	}
 
@@ -339,7 +372,7 @@ func DeleteProject(c *gin.Context) {
 
 	// Check if project exists
 	var project Project
-	err := database.QueryRow("SELECT * FROM projects WHERE id = ?", id).Scan(&project.ID)
+	err := database.QueryRow("SELECT id FROM projects WHERE id = ?", id).Scan(&project.ID)
 	if err == sql.ErrNoRows {
 		panic(middleware.NewNotFoundError("Project"))
 	}
@@ -719,9 +752,10 @@ func SetProjectOwner(c *gin.Context) {
 	// Get updated project with owner info
 	var updatedProject ProjectWithOwner
 	err = database.QueryRow(`
-		SELECT p.*, 
-			o.id as owner_id, o.name as owner_name, o.email as owner_email, 
-			o.company as owner_company, o.designation as owner_designation
+		SELECT p.id, p.name, p.description, p.color, p.parent_project_id, p.owner_id,
+			o.name as owner_name, o.email as owner_email,
+			o.company as owner_company, o.designation as owner_designation,
+			p.created_at, p.updated_at
 		FROM projects p
 		LEFT JOIN people o ON p.owner_id = o.id
 		WHERE p.id = ?
@@ -834,7 +868,7 @@ func AddProjectAssignee(c *gin.Context) {
 	if req.Role != "" {
 		assignmentRole = req.Role
 	}
-	if !strings.Contains(validProjectRoles, assignmentRole) {
+	if assignmentRole != "lead" && assignmentRole != "member" && assignmentRole != "observer" {
 		panic(middleware.NewValidationError(fmt.Sprintf("Invalid role. Must be one of: %s", validProjectRoles)))
 	}
 

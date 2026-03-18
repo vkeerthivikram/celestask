@@ -175,11 +175,10 @@ func getOrCreateSettings(database *db.Database) (*PomodoroSettings, error) {
 	)
 
 	if err == sql.ErrNoRows {
-		// Create default settings
-		id := uuid.New().String()
+		// Create default settings with the fixed ID so the follow-up SELECT finds it.
 		_, err := database.Exec(`
-			INSERT INTO pomodoro_settings (id) VALUES (?)
-		`, id)
+			INSERT INTO pomodoro_settings (id) VALUES ('default')
+		`)
 		if err != nil {
 			return nil, err
 		}
@@ -246,6 +245,28 @@ func UpdatePomodoroSettings(c *gin.Context) {
 	_, err = getOrCreateSettings(database)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, middleware.NewFetchError("pomodoro settings"))
+		return
+	}
+
+	// Validate provided values before writing
+	if req.WorkDurationUs != nil && *req.WorkDurationUs <= 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("work_duration_us must be positive"))
+		return
+	}
+	if req.ShortBreakUs != nil && *req.ShortBreakUs <= 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("short_break_us must be positive"))
+		return
+	}
+	if req.LongBreakUs != nil && *req.LongBreakUs <= 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("long_break_us must be positive"))
+		return
+	}
+	if req.SessionsUntilLongBreak != nil && *req.SessionsUntilLongBreak <= 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("sessions_until_long_break must be positive"))
+		return
+	}
+	if req.DailyGoal != nil && *req.DailyGoal < 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("daily_goal must be non-negative"))
 		return
 	}
 
@@ -393,30 +414,21 @@ func StartPomodoro(c *gin.Context) {
 	}
 
 	var req StartPomodoroRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		// Allow empty body
-		req = StartPomodoroRequest{}
+	if c.Request.ContentLength > 0 {
+		// Non-empty body: parse normally and return 400 on malformed input
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, middleware.NewValidationError("Invalid request body"))
+			return
+		}
 	}
+	// Empty body: req stays at zero value, which is fine (defaults apply)
 
-	// Check if there's already an active session
-	currentSession, err := getCurrentSession(database)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, middleware.NewFetchError("current session"))
-		return
-	}
-
-	if currentSession != nil {
-		c.JSON(http.StatusConflict, middleware.NewErrorResponse("CONFLICT_ERROR", "A session is already in progress. Stop or complete it first."))
-		return
-	}
-
-	// Determine session type
+	// Validate session type early
 	sessionType := SessionTypeWork
 	if req.SessionType != nil {
 		sessionType = *req.SessionType
 	}
 
-	// Validate session type
 	if sessionType != SessionTypeWork && sessionType != SessionTypeShortBreak && sessionType != SessionTypeLongBreak {
 		c.JSON(http.StatusBadRequest, middleware.NewValidationError("Invalid session_type. Must be work, short_break, or long_break"))
 		return
@@ -442,13 +454,40 @@ func StartPomodoro(c *gin.Context) {
 	id := uuid.New().String()
 	now := getCurrentTimestamp()
 
-	_, err = database.Exec(`
+	// Use a transaction to make the "check for running session + insert" atomic.
+	tx, err := database.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, middleware.NewCreateError("session"))
+		return
+	}
+
+	// Re-check for an active session inside the transaction to prevent races.
+	var existingID string
+	txErr := tx.QueryRow(`SELECT id FROM pomodoro_sessions WHERE timer_state = 'running' LIMIT 1`).Scan(&existingID)
+	if txErr == nil {
+		tx.Rollback()
+		c.JSON(http.StatusConflict, middleware.NewErrorResponse("CONFLICT_ERROR", "A session is already in progress. Stop or complete it first."))
+		return
+	}
+	if txErr != sql.ErrNoRows {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, middleware.NewFetchError("current session"))
+		return
+	}
+
+	_, err = tx.Exec(`
 		INSERT INTO pomodoro_sessions (
 			id, task_id, session_type, timer_state, duration_us, elapsed_us,
 			started_at, completed, interrupted, created_at, updated_at
 		) VALUES (?, ?, ?, 'running', ?, 0, ?, 0, 0, ?, ?)
 	`, id, req.TaskID, sessionType, durationUs, now, now, now)
 	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, middleware.NewCreateError("session"))
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
 		c.JSON(http.StatusInternalServerError, middleware.NewCreateError("session"))
 		return
 	}
@@ -899,8 +938,8 @@ func GetPomodoroStats(c *gin.Context) {
 		SELECT
 			COALESCE(COUNT(*), 0),
 			COALESCE(SUM(elapsed_us), 0),
-			SUM(CASE WHEN session_type = 'short_break' THEN 1 ELSE 0 END),
-			SUM(CASE WHEN session_type = 'long_break' THEN 1 ELSE 0 END)
+			COALESCE(SUM(CASE WHEN session_type = 'short_break' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN session_type = 'long_break' THEN 1 ELSE 0 END), 0)
 		FROM pomodoro_sessions
 		WHERE session_type IN ('short_break', 'long_break')
 		  AND completed = 1

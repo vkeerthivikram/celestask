@@ -103,6 +103,20 @@ func NewInternalError(message string) ErrorResponse {
 	return NewErrorResponse(CodeInternalError, message)
 }
 
+// errorResponseStatus maps an ErrorResponse code to the appropriate HTTP status code.
+func errorResponseStatus(apiErr ErrorResponse) int {
+	switch apiErr.Err.Code {
+	case CodeNotFound:
+		return http.StatusNotFound
+	case CodeValidationError:
+		return http.StatusBadRequest
+	case CodeFetchError, CodeCreateError, CodeUpdateError, CodeDeleteError, CodeInternalError:
+		return http.StatusInternalServerError
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
 // AsyncHandler wraps a gin handler function with automatic error handling
 // It catches panics and returns standardized error responses
 func AsyncHandler(fn gin.HandlerFunc) gin.HandlerFunc {
@@ -114,7 +128,7 @@ func AsyncHandler(fn gin.HandlerFunc) gin.HandlerFunc {
 
 				// Check if it's an ErrorResponse
 				if apiErr, ok := err.(ErrorResponse); ok {
-					c.JSON(http.StatusBadRequest, apiErr)
+					c.JSON(errorResponseStatus(apiErr), apiErr)
 					return
 				}
 
@@ -150,15 +164,7 @@ func AsyncHandlerFunc(fn func(c *gin.Context) error) gin.HandlerFunc {
 		if err := fn(c); err != nil {
 			// Handle error responses
 			if apiErr, ok := err.(ErrorResponse); ok {
-				// Determine appropriate HTTP status code
-				status := http.StatusInternalServerError
-				switch apiErr.Err.Code {
-				case CodeNotFound:
-					status = http.StatusNotFound
-				case CodeValidationError:
-					status = http.StatusBadRequest
-				}
-				c.JSON(status, apiErr)
+				c.JSON(errorResponseStatus(apiErr), apiErr)
 				return
 			}
 

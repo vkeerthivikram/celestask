@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -15,6 +16,9 @@ import (
 	"github.com/celestask/server/internal/middleware"
 	"github.com/gin-gonic/gin"
 )
+
+// importMu prevents two concurrent import operations from interleaving writes.
+var importMu sync.Mutex
 
 // Table names to export/import
 var tableNames = []string{
@@ -34,38 +38,73 @@ var tableNames = []string{
 	"pomodoro_sessions",
 }
 
-// ExportData represents the structure of exported JSON data
-type ExportData struct {
-	Version    string                   `json:"version"`
-	ExportedAt time.Time                `json:"exported_at"`
-	Tables     map[string][]interface{} `json:"tables"`
+// tableColumns defines the allowed columns for each table to prevent SQL injection.
+// Only columns listed here can be used in import INSERT statements.
+var tableColumns = map[string]map[string]struct{}{
+	"projects": {"id": {}, "name": {}, "description": {}, "color": {}, "parent_project_id": {}, "owner_id": {}, "created_at": {}, "updated_at": {}},
+	"tasks":    {"id": {}, "project_id": {}, "parent_task_id": {}, "title": {}, "description": {}, "status": {}, "priority": {}, "assignee_id": {}, "due_date": {}, "start_date": {}, "end_date": {}, "progress_percent": {}, "estimated_duration_minutes": {}, "actual_duration_minutes": {}, "created_at": {}, "updated_at": {}},
+	"people":   {"id": {}, "name": {}, "email": {}, "company": {}, "designation": {}, "project_id": {}, "created_at": {}, "updated_at": {}},
+	"tags":     {"id": {}, "name": {}, "color": {}, "project_id": {}, "created_at": {}, "updated_at": {}},
+	"notes":    {"id": {}, "content": {}, "entity_type": {}, "entity_id": {}, "created_at": {}, "updated_at": {}},
+	"task_assignees":     {"id": {}, "task_id": {}, "person_id": {}, "role": {}, "created_at": {}},
+	"task_tags":          {"id": {}, "task_id": {}, "tag_id": {}, "created_at": {}},
+	"project_assignees":  {"id": {}, "project_id": {}, "person_id": {}, "role": {}, "created_at": {}},
+	"custom_fields":      {"id": {}, "name": {}, "field_type": {}, "project_id": {}, "options": {}, "required": {}, "sort_order": {}, "created_at": {}, "updated_at": {}},
+	"custom_field_values": {"id": {}, "task_id": {}, "custom_field_id": {}, "value": {}, "created_at": {}, "updated_at": {}},
+	"saved_views":    {"id": {}, "name": {}, "view_type": {}, "project_id": {}, "filters": {}, "sort_by": {}, "sort_order": {}, "is_default": {}, "created_at": {}, "updated_at": {}},
+	"time_entries":   {"id": {}, "entity_type": {}, "entity_id": {}, "person_id": {}, "description": {}, "start_time": {}, "end_time": {}, "duration_us": {}, "is_running": {}, "created_at": {}, "updated_at": {}},
+	"pomodoro_settings": {"id": {}, "work_duration": {}, "short_break_duration": {}, "long_break_duration": {}, "sessions_until_long_break": {}, "daily_goal": {}, "auto_start_breaks": {}, "auto_start_work": {}, "created_at": {}, "updated_at": {}},
+	"pomodoro_sessions":  {"id": {}, "session_type": {}, "started_at": {}, "ended_at": {}, "elapsed_us": {}, "completed": {}, "task_id": {}, "created_at": {}},
 }
 
-// ImportStatus tracks the status of an import operation
-type ImportStatus struct {
-	Status          string    `json:"status"`   // "idle", "in_progress", "completed", "failed"
-	Progress        int       `json:"progress"` // 0-100
-	RecordsImported int       `json:"records_imported"`
-	TotalRecords    int       `json:"total_records"`
-	Error           string    `json:"error,omitempty"`
-	StartedAt       time.Time `json:"started_at,omitempty"`
-	CompletedAt     time.Time `json:"completed_at,omitempty"`
+// ExportPayload is the JSON shape the client expects for export/import.
+// It matches the client's ImportPayload type: { version, exportedAt, data }.
+type ExportPayload struct {
+	Version    string                            `json:"version"`
+	ExportedAt string                            `json:"exportedAt"`
+	Data       map[string][]map[string]interface{} `json:"data"`
 }
 
-// Global import status (in production, this should be in a database or cache)
-var (
-	importStatus     ImportStatus
-	importStatusLock sync.RWMutex
-)
+// ImportTableSummary holds per-table import results.
+type ImportTableSummary struct {
+	Imported int `json:"imported"`
+	Skipped  int `json:"skipped"`
+	Errors   int `json:"errors"`
+}
 
-// GetExport exports the entire database as JSON
+// ImportErrorDetail holds details of a single import error.
+type ImportErrorDetail struct {
+	Table string `json:"table"`
+	ID    string `json:"id"`
+	Error string `json:"error"`
+}
+
+// ImportResult is returned synchronously after a successful import.
+type ImportResult struct {
+	Mode        string                        `json:"mode"`
+	Summary     map[string]ImportTableSummary `json:"summary"`
+	Totals      ImportTotals                  `json:"totals"`
+	ImportedAt  string                        `json:"importedAt"`
+	ErrorDetails []ImportErrorDetail          `json:"errorDetails,omitempty"`
+	TotalErrors int                           `json:"totalErrors,omitempty"`
+}
+
+// ImportTotals aggregates imported/skipped/error counts.
+type ImportTotals struct {
+	Imported int `json:"imported"`
+	Skipped  int `json:"skipped"`
+	Errors   int `json:"errors"`
+}
+
+// GetExport exports the entire database as a downloadable JSON file using
+// the client-compatible payload shape { version, exportedAt, data }.
 func GetExport(c *gin.Context) {
 	database := c.MustGet("database").(*db.Database)
 
-	exportData := ExportData{
+	payload := ExportPayload{
 		Version:    "1.0",
-		ExportedAt: time.Now(),
-		Tables:     make(map[string][]interface{}),
+		ExportedAt: time.Now().UTC().Format(time.RFC3339),
+		Data:       make(map[string][]map[string]interface{}),
 	}
 
 	for _, tableName := range tableNames {
@@ -88,6 +127,7 @@ func GetExport(c *gin.Context) {
 			return
 		}
 
+		var tableRows []map[string]interface{}
 		for rows.Next() {
 			values := make([]interface{}, len(columns))
 			valuePtrs := make([]interface{}, len(columns))
@@ -108,8 +148,7 @@ func GetExport(c *gin.Context) {
 			for i, col := range columns {
 				rowMap[col] = values[i]
 			}
-
-			exportData.Tables[tableName] = append(exportData.Tables[tableName], rowMap)
+			tableRows = append(tableRows, rowMap)
 		}
 
 		rows.Close()
@@ -120,9 +159,48 @@ func GetExport(c *gin.Context) {
 			))
 			return
 		}
+
+		if tableRows == nil {
+			tableRows = []map[string]interface{}{}
+		}
+		payload.Data[tableName] = tableRows
 	}
 
-	c.JSON(http.StatusOK, middleware.NewSuccessResponse(exportData))
+	exportJSON, err := json.Marshal(payload)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, middleware.NewInternalError("Failed to serialize export data"))
+		return
+	}
+
+	filename := fmt.Sprintf("celestask-export-%s.json", time.Now().Format("2006-01-02"))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	c.Header("Content-Type", "application/json")
+	c.Data(http.StatusOK, "application/json", exportJSON)
+}
+
+// GetExportStatus returns metadata about the current database state.
+func GetExportStatus(c *gin.Context) {
+	database := c.MustGet("database").(*db.Database)
+
+	tableStats := make(map[string]int)
+	totalRecords := 0
+
+	for _, tableName := range tableNames {
+		var count int
+		err := database.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&count)
+		if err != nil {
+			count = 0
+		}
+		tableStats[tableName] = count
+		totalRecords += count
+	}
+
+	c.JSON(http.StatusOK, middleware.NewSuccessResponse(gin.H{
+		"version":         "1.0",
+		"tableStats":      tableStats,
+		"totalRecords":    totalRecords,
+		"supportedTables": tableNames,
+	}))
 }
 
 // GetExportSQLite downloads the SQLite database file
@@ -148,15 +226,23 @@ func GetExportSQLite(c *gin.Context) {
 	filename := fmt.Sprintf("celestask_%s.db", time.Now().Format("2006-01-02"))
 	c.Header("Content-Description", "File Transfer")
 	c.Header("Content-Transfer-Encoding", "binary")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 	c.Header("Content-Type", "application/octet-stream")
 
 	c.File(dbPath)
 }
 
-// PostImport imports data from JSON (replaces all data)
+// PostImport imports data from a JSON export file.
+// Accepts the client payload shape { version, exportedAt, data } and
+// honours the ?mode=merge|replace query parameter. The operation runs
+// synchronously and returns an ImportResult.
 func PostImport(c *gin.Context) {
 	database := c.MustGet("database").(*db.Database)
+
+	mode := c.Query("mode")
+	if mode != "merge" && mode != "replace" {
+		mode = "replace"
+	}
 
 	// Read request body
 	body, err := io.ReadAll(c.Request.Body)
@@ -165,215 +251,200 @@ func PostImport(c *gin.Context) {
 		return
 	}
 
-	// Parse JSON
-	var importData ExportData
-	if err := json.Unmarshal(body, &importData); err != nil {
+	// Parse JSON payload – accept the client shape { version, exportedAt, data }
+	var payload ExportPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
 		c.JSON(http.StatusBadRequest, middleware.NewValidationError(fmt.Sprintf("Invalid JSON format: %v", err)))
 		return
 	}
 
-	// Validate structure
-	if importData.Tables == nil {
-		c.JSON(http.StatusBadRequest, middleware.NewValidationError("Invalid import data: missing tables"))
+	if payload.Data == nil {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("Invalid import data: missing 'data' field"))
 		return
 	}
 
-	// Calculate total records
-	totalRecords := 0
-	for _, records := range importData.Tables {
-		totalRecords += len(records)
+	// Reject a second concurrent import
+	if !importMu.TryLock() {
+		c.JSON(http.StatusConflict, middleware.NewErrorResponse("IMPORT_IN_PROGRESS", "Another import is already running"))
+		return
+	}
+	defer importMu.Unlock()
+
+	result, importErr := performSyncImport(database, payload, mode)
+	if importErr != nil {
+		c.JSON(http.StatusInternalServerError, middleware.NewErrorResponse(
+			middleware.CodeInternalError,
+			fmt.Sprintf("Import failed: %v", importErr),
+		))
+		return
 	}
 
-	// Set import status to in_progress
-	importStatusLock.Lock()
-	importStatus = ImportStatus{
-		Status:          "in_progress",
-		Progress:        0,
-		RecordsImported: 0,
-		TotalRecords:    totalRecords,
-		StartedAt:       time.Now(),
-	}
-	importStatusLock.Unlock()
-
-	// Start import in background
-	go performImport(database, importData)
-
-	c.JSON(http.StatusAccepted, middleware.NewSuccessResponse(gin.H{
-		"message": "Import started",
-		"status":  "in_progress",
-	}))
+	c.JSON(http.StatusOK, middleware.NewSuccessResponse(result))
 }
 
-// performImport performs the actual import operation
-func performImport(database *db.Database, importData ExportData) {
-	defer func() {
-		if r := recover(); r != nil {
-			importStatusLock.Lock()
-			importStatus.Status = "failed"
-			importStatus.Error = fmt.Sprintf("Panic during import: %v", r)
-			importStatusLock.Unlock()
-		}
-	}()
-
-	recordsImported := 0
-
-	// Disable foreign keys temporarily
-	if _, err := database.Exec("PRAGMA foreign_keys = OFF"); err != nil {
-		setImportError(fmt.Sprintf("Failed to disable foreign keys: %v", err))
-		return
+// performSyncImport runs the import operation inside a single transaction and
+// returns an ImportResult on success.
+func performSyncImport(database *db.Database, payload ExportPayload, mode string) (*ImportResult, error) {
+	result := &ImportResult{
+		Mode:       mode,
+		Summary:    make(map[string]ImportTableSummary),
+		ImportedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	// Begin transaction
+	// Begin the transaction first, then disable foreign keys on the same connection.
 	tx, err := database.Begin()
 	if err != nil {
-		setImportError(fmt.Sprintf("Failed to begin transaction: %v", err))
-		return
+		return nil, fmt.Errorf("failed to begin transaction: %v", err)
 	}
 
-	// Clear existing data (in reverse order of dependencies)
-	// First clear tables with foreign keys, then tables referenced by others
-	tablesToClear := []string{
-		"pomodoro_sessions",
-		"pomodoro_settings",
-		"time_entries",
-		"saved_views",
-		"custom_field_values",
-		"custom_fields",
-		"project_assignees",
-		"task_tags",
-		"task_assignees",
-		"notes",
-		"tags",
-		"people",
-		"tasks",
-		"projects",
+	// Disable foreign keys on the transaction's connection so the constraint is
+	// relaxed for the duration of the import without affecting other connections.
+	if _, err := tx.Exec("PRAGMA foreign_keys = OFF"); err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("failed to disable foreign keys: %v", err)
 	}
 
-	for _, tableName := range tablesToClear {
-		if _, err := tx.Exec(fmt.Sprintf("DELETE FROM %s", tableName)); err != nil {
-			tx.Rollback()
-			setImportError(fmt.Sprintf("Failed to clear table %s: %v", tableName, err))
-			return
+	if mode == "replace" {
+		// Clear all tables in reverse dependency order
+		clearOrder := []string{
+			"pomodoro_sessions", "pomodoro_settings", "time_entries",
+			"saved_views", "custom_field_values", "custom_fields",
+			"project_assignees", "task_tags", "task_assignees",
+			"notes", "tags", "people", "tasks", "projects",
+		}
+		for _, t := range clearOrder {
+			if _, err := tx.Exec(fmt.Sprintf("DELETE FROM %s", t)); err != nil {
+				tx.Rollback()
+				return nil, fmt.Errorf("failed to clear table %s: %v", t, err)
+			}
 		}
 	}
 
-	// Import data in order of dependencies (tables without foreign keys first)
+	// Import in dependency order
 	importOrder := []string{
-		"projects",
-		"people",
-		"tags",
-		"tasks",
-		"notes",
-		"task_assignees",
-		"task_tags",
-		"project_assignees",
-		"custom_fields",
-		"custom_field_values",
-		"saved_views",
-		"time_entries",
-		"pomodoro_settings",
-		"pomodoro_sessions",
+		"projects", "people", "tags", "tasks", "notes",
+		"task_assignees", "task_tags", "project_assignees",
+		"custom_fields", "custom_field_values",
+		"saved_views", "time_entries",
+		"pomodoro_settings", "pomodoro_sessions",
 	}
 
+	var errorDetails []ImportErrorDetail
+
 	for _, tableName := range importOrder {
-		records, ok := importData.Tables[tableName]
+		records, ok := payload.Data[tableName]
 		if !ok || len(records) == 0 {
+			result.Summary[tableName] = ImportTableSummary{}
 			continue
 		}
 
-		if err := importTable(tx, tableName, records); err != nil {
-			tx.Rollback()
-			setImportError(fmt.Sprintf("Failed to import table %s: %v", tableName, err))
-			return
-		}
-
-		recordsImported += len(records)
-
-		// Update progress
-		totalRecords := 0
-		for _, r := range importData.Tables {
-			totalRecords += len(r)
-		}
-		progress := 0
-		if totalRecords > 0 {
-			progress = (recordsImported * 100) / totalRecords
-		}
-
-		importStatusLock.Lock()
-		importStatus.Progress = progress
-		importStatus.RecordsImported = recordsImported
-		importStatusLock.Unlock()
+		summary, errs := importTableRows(tx, tableName, records, mode)
+		result.Summary[tableName] = summary
+		errorDetails = append(errorDetails, errs...)
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
-		setImportError(fmt.Sprintf("Failed to commit transaction: %v", err))
-		return
+		return nil, fmt.Errorf("failed to commit transaction: %v", err)
 	}
 
-	// Re-enable foreign keys
-	if _, err := database.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		setImportError(fmt.Sprintf("Failed to re-enable foreign keys: %v", err))
-		return
+	// Aggregate totals
+	for _, s := range result.Summary {
+		result.Totals.Imported += s.Imported
+		result.Totals.Skipped += s.Skipped
+		result.Totals.Errors += s.Errors
 	}
 
-	// Update final status
-	importStatusLock.Lock()
-	importStatus.Status = "completed"
-	importStatus.Progress = 100
-	importStatus.CompletedAt = time.Now()
-	importStatusLock.Unlock()
+	if len(errorDetails) > 0 {
+		result.ErrorDetails = errorDetails
+		result.TotalErrors = len(errorDetails)
+	}
+
+	return result, nil
 }
 
-// importTable imports records into a table
-func importTable(tx *sql.Tx, tableName string, records []interface{}) error {
+// importTableRows inserts records into a table and returns per-table stats.
+// Column names are validated against a known allowlist to prevent SQL injection.
+func importTableRows(tx *sql.Tx, tableName string, records []map[string]interface{}, mode string) (ImportTableSummary, []ImportErrorDetail) {
+	summary := ImportTableSummary{}
+	var errorDetails []ImportErrorDetail
+
 	if len(records) == 0 {
-		return nil
+		return summary, errorDetails
 	}
 
-	// Get column names from first record
-	firstRecord, ok := records[0].(map[string]interface{})
+	// Get the allowlist for this table
+	allowedCols, ok := tableColumns[tableName]
 	if !ok {
-		return fmt.Errorf("invalid record format for table %s", tableName)
+		// Unknown table – skip safely
+		return summary, errorDetails
 	}
 
-	var columns []string
-	var placeholders []string
-	var values []interface{}
-
-	for col := range firstRecord {
-		columns = append(columns, col)
-		placeholders = append(placeholders, "?")
-	}
-
-	for _, record := range records {
-		recordMap, ok := record.(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("invalid record format for table %s", tableName)
-		}
-
-		for _, col := range columns {
-			val, ok := recordMap[col]
-			if !ok {
-				val = nil
+	// Collect all column names from the records, filtering against the allowlist.
+	columnSet := make(map[string]struct{})
+	for _, rec := range records {
+		for col := range rec {
+			if _, allowed := allowedCols[col]; allowed {
+				columnSet[col] = struct{}{}
 			}
-			values = append(values, val)
 		}
 	}
+	var columns []string
+	for col := range columnSet {
+		columns = append(columns, col)
+	}
+	sort.Strings(columns)
+
+	if len(columns) == 0 {
+		return summary, errorDetails
+	}
+
+	insertKeyword := "INSERT OR REPLACE"
+	if mode == "merge" {
+		insertKeyword = "INSERT OR IGNORE"
+	}
+
+	placeholders := make([]string, len(columns))
+	for i := range placeholders {
+		placeholders[i] = "?"
+	}
+	placeholderStr := "(" + joinColumns(placeholders) + ")"
 
 	query := fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES %s",
+		"%s INTO %s (%s) VALUES %s",
+		insertKeyword,
 		tableName,
 		joinColumns(columns),
-		buildValuesPlaceholders(len(records), len(columns)),
+		placeholderStr,
 	)
 
-	_, err := tx.Exec(query, values...)
+	stmt, err := tx.Prepare(query)
 	if err != nil {
-		return fmt.Errorf("failed to insert into %s: %v", tableName, err)
+		// Can't prepare – mark all as errors
+		for _, rec := range records {
+			id, _ := rec["id"].(string)
+			errorDetails = append(errorDetails, ImportErrorDetail{Table: tableName, ID: id, Error: err.Error()})
+			summary.Errors++
+		}
+		return summary, errorDetails
+	}
+	defer stmt.Close()
+
+	for _, rec := range records {
+		values := make([]interface{}, len(columns))
+		for i, col := range columns {
+			values[i] = rec[col]
+		}
+
+		if _, err := stmt.Exec(values...); err != nil {
+			id, _ := rec["id"].(string)
+			errorDetails = append(errorDetails, ImportErrorDetail{Table: tableName, ID: id, Error: err.Error()})
+			summary.Errors++
+		} else {
+			summary.Imported++
+		}
 	}
 
-	return nil
+	return summary, errorDetails
 }
 
 // joinColumns joins column names with commas
@@ -388,39 +459,12 @@ func joinColumns(columns []string) string {
 	return result
 }
 
-// buildValuesPlaceholders builds VALUES clause for multiple rows
-func buildValuesPlaceholders(numRows, numCols int) string {
-	result := ""
-	for row := 0; row < numRows; row++ {
-		if row > 0 {
-			result += ", "
-		}
-		result += "("
-		for col := 0; col < numCols; col++ {
-			if col > 0 {
-				result += ", "
-			}
-			result += "?"
-		}
-		result += ")"
-	}
-	return result
-}
-
-// setImportError sets the import status to failed with an error message
-func setImportError(errMsg string) {
-	importStatusLock.Lock()
-	importStatus.Status = "failed"
-	importStatus.Error = errMsg
-	importStatus.CompletedAt = time.Now()
-	importStatusLock.Unlock()
-}
-
-// GetImportStatus returns the current import status
+// GetImportStatus is kept for backward compatibility but returns a static idle status
+// since imports are now synchronous.
 func GetImportStatus(c *gin.Context) {
-	importStatusLock.RLock()
-	status := importStatus
-	importStatusLock.RUnlock()
-
-	c.JSON(http.StatusOK, middleware.NewSuccessResponse(status))
+	c.JSON(http.StatusOK, middleware.NewSuccessResponse(gin.H{
+		"status":   "idle",
+		"progress": 100,
+	}))
 }
+

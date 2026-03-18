@@ -78,7 +78,7 @@ func isValidViewType(viewType string) bool {
 }
 
 // parseSavedView converts a database row to API response
-func parseSavedView(row *SavedView) SavedViewResponse {
+func parseSavedView(row *SavedView) (SavedViewResponse, error) {
 	response := SavedViewResponse{
 		ID:        row.ID,
 		Name:      row.Name,
@@ -99,7 +99,9 @@ func parseSavedView(row *SavedView) SavedViewResponse {
 	}
 
 	if row.Filters != "" {
-		json.Unmarshal([]byte(row.Filters), &response.Filters)
+		if err := json.Unmarshal([]byte(row.Filters), &response.Filters); err != nil {
+			return response, err
+		}
 	}
 
 	if row.SortBy.Valid {
@@ -110,7 +112,7 @@ func parseSavedView(row *SavedView) SavedViewResponse {
 		response.SortOrder = row.SortOrder.String
 	}
 
-	return response
+	return response, nil
 }
 
 // GetSavedViews retrieves all saved views, optionally filtered by project_id and view_type
@@ -170,7 +172,10 @@ func GetSavedViews(c *gin.Context) {
 		if err != nil {
 			panic(middleware.NewFetchError("saved views"))
 		}
-		parsedView := parseSavedView(&view)
+		parsedView, err := parseSavedView(&view)
+		if err != nil {
+			panic(middleware.NewFetchError("saved views"))
+		}
 		views = append(views, parsedView)
 	}
 
@@ -219,7 +224,11 @@ func GetSavedView(c *gin.Context) {
 		panic(middleware.NewFetchError("saved view"))
 	}
 
-	c.JSON(http.StatusOK, middleware.NewSuccessResponse(parseSavedView(&view)))
+	parsedView, parseErr := parseSavedView(&view)
+	if parseErr != nil {
+		panic(middleware.NewFetchError("saved view"))
+	}
+	c.JSON(http.StatusOK, middleware.NewSuccessResponse(parsedView))
 }
 
 // CreateSavedView creates a new saved view
@@ -257,12 +266,6 @@ func CreateSavedView(c *gin.Context) {
 	isDefault := 0
 	if req.IsDefault != nil && *req.IsDefault {
 		isDefault = 1
-		// Unset any existing default for the same project and view_type
-		if req.ProjectID != nil {
-			database.Exec("UPDATE saved_views SET is_default = 0 WHERE project_id = ? AND view_type = ?", *req.ProjectID, req.ViewType)
-		} else {
-			database.Exec("UPDATE saved_views SET is_default = 0 WHERE project_id IS NULL AND view_type = ?", req.ViewType)
-		}
 	}
 
 	var projectID interface{}
@@ -272,18 +275,41 @@ func CreateSavedView(c *gin.Context) {
 		projectID = nil
 	}
 
-	_, err := database.Exec(`
+	// Wrap default-unset + insert in a transaction so promotion is atomic
+	tx, txErr := database.Begin()
+	if txErr != nil {
+		panic(middleware.NewCreateError("saved view"))
+	}
+
+	if isDefault == 1 {
+		var txExecErr error
+		if req.ProjectID != nil {
+			_, txExecErr = tx.Exec("UPDATE saved_views SET is_default = 0 WHERE project_id = ? AND view_type = ?", *req.ProjectID, req.ViewType)
+		} else {
+			_, txExecErr = tx.Exec("UPDATE saved_views SET is_default = 0 WHERE project_id IS NULL AND view_type = ?", req.ViewType)
+		}
+		if txExecErr != nil {
+			tx.Rollback()
+			panic(middleware.NewCreateError("saved view"))
+		}
+	}
+
+	_, txInsertErr := tx.Exec(`
 		INSERT INTO saved_views (id, name, view_type, project_id, filters, sort_by, sort_order, is_default, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id, req.Name, req.ViewType, projectID, filtersJSON, req.SortBy, sortOrder, isDefault, now, now)
+	if txInsertErr != nil {
+		tx.Rollback()
+		panic(middleware.NewCreateError("saved view"))
+	}
 
-	if err != nil {
+	if err := tx.Commit(); err != nil {
 		panic(middleware.NewCreateError("saved view"))
 	}
 
 	// Fetch the created view
 	var view SavedView
-	err = database.QueryRow(`
+	err := database.QueryRow(`
 		SELECT sv.*, p.name as project_name
 		FROM saved_views sv
 		LEFT JOIN projects p ON sv.project_id = p.id
@@ -306,7 +332,11 @@ func CreateSavedView(c *gin.Context) {
 		panic(middleware.NewFetchError("saved view"))
 	}
 
-	c.JSON(http.StatusCreated, middleware.NewSuccessResponse(parseSavedView(&view)))
+	parsedView, parseErr := parseSavedView(&view)
+	if parseErr != nil {
+		panic(middleware.NewFetchError("saved view"))
+	}
+	c.JSON(http.StatusCreated, middleware.NewSuccessResponse(parsedView))
 }
 
 // UpdateSavedView updates an existing saved view
@@ -361,11 +391,15 @@ func UpdateSavedView(c *gin.Context) {
 	}
 
 	var projectID interface{}
+	projectIDValid := false
 	if req.ProjectID != nil {
 		projectID = *req.ProjectID
-	} else {
-		projectID = existingView.ProjectID
+		projectIDValid = true
+	} else if existingView.ProjectID.Valid {
+		projectID = existingView.ProjectID.Int64
+		projectIDValid = true
 	}
+	// If neither is set, projectID stays nil (NULL in DB)
 
 	filtersJSON := existingView.Filters
 	if req.Filters != nil {
@@ -373,38 +407,61 @@ func UpdateSavedView(c *gin.Context) {
 		filtersJSON = string(filtersBytes)
 	}
 
-	sortBy := existingView.SortBy.String
+	var sortBy interface{}
 	if req.SortBy != nil {
 		sortBy = *req.SortBy
+	} else if existingView.SortBy.Valid {
+		sortBy = existingView.SortBy.String
 	}
 
-	sortOrder := existingView.SortOrder.String
+	var sortOrder interface{}
 	if req.SortOrder != nil {
 		sortOrder = *req.SortOrder
+	} else if existingView.SortOrder.Valid {
+		sortOrder = existingView.SortOrder.String
 	}
 
 	isDefault := existingView.IsDefault
 	if req.IsDefault != nil {
 		if *req.IsDefault {
 			isDefault = 1
-			// Unset any existing default for the same project and view_type
-			if projectID != nil {
-				database.Exec("UPDATE saved_views SET is_default = 0 WHERE project_id = ? AND view_type = ? AND id != ?", projectID, viewType, id)
-			} else {
-				database.Exec("UPDATE saved_views SET is_default = 0 WHERE project_id IS NULL AND view_type = ? AND id != ?", viewType, id)
-			}
 		} else {
 			isDefault = 0
 		}
 	}
 
-	_, err = database.Exec(`
+	// Wrap default-unset + update in a transaction for atomicity
+	tx, txErr := database.Begin()
+	if txErr != nil {
+		panic(middleware.NewUpdateError("saved view"))
+	}
+
+	if isDefault == 1 && (req.IsDefault != nil && *req.IsDefault) {
+		// Unset any existing default for the same project and view_type (excluding self)
+		var unsetErr error
+		if projectIDValid {
+			_, unsetErr = tx.Exec("UPDATE saved_views SET is_default = 0 WHERE project_id = ? AND view_type = ? AND id != ?", projectID, viewType, id)
+		} else {
+			_, unsetErr = tx.Exec("UPDATE saved_views SET is_default = 0 WHERE project_id IS NULL AND view_type = ? AND id != ?", viewType, id)
+		}
+		if unsetErr != nil {
+			tx.Rollback()
+			panic(middleware.NewUpdateError("saved view"))
+		}
+	}
+
+	_, err = tx.Exec(`
 		UPDATE saved_views 
 		SET name = ?, view_type = ?, project_id = ?, filters = ?, sort_by = ?, sort_order = ?, is_default = ?, updated_at = ?
 		WHERE id = ?
 	`, name, viewType, projectID, filtersJSON, sortBy, sortOrder, isDefault, now, id)
 
 	if err != nil {
+		tx.Rollback()
+		panic(middleware.NewUpdateError("saved view"))
+	}
+
+	if err = tx.Commit(); err != nil {
 		panic(middleware.NewUpdateError("saved view"))
 	}
 
@@ -433,7 +490,11 @@ func UpdateSavedView(c *gin.Context) {
 		panic(middleware.NewFetchError("saved view"))
 	}
 
-	c.JSON(http.StatusOK, middleware.NewSuccessResponse(parseSavedView(&view)))
+	parsedView, parseErr := parseSavedView(&view)
+	if parseErr != nil {
+		panic(middleware.NewFetchError("saved view"))
+	}
+	c.JSON(http.StatusOK, middleware.NewSuccessResponse(parsedView))
 }
 
 // DeleteSavedView deletes a saved view
@@ -515,16 +576,29 @@ func SetDefaultView(c *gin.Context) {
 
 	now := time.Now().Format(time.RFC3339)
 
-	// Unset any existing default for the same project and view_type
-	if existingView.ProjectID.Valid {
-		database.Exec("UPDATE saved_views SET is_default = 0 WHERE project_id = ? AND view_type = ?", existingView.ProjectID.Int64, existingView.ViewType)
-	} else {
-		database.Exec("UPDATE saved_views SET is_default = 0 WHERE project_id IS NULL AND view_type = ?", existingView.ViewType)
+	// Wrap unset + set in a transaction to make default promotion atomic
+	tx, txErr := database.Begin()
+	if txErr != nil {
+		panic(middleware.NewUpdateError("saved view"))
 	}
 
-	// Set this view as default
-	_, err = database.Exec("UPDATE saved_views SET is_default = 1, updated_at = ? WHERE id = ?", now, id)
-	if err != nil {
+	var unsetErr error
+	if existingView.ProjectID.Valid {
+		_, unsetErr = tx.Exec("UPDATE saved_views SET is_default = 0 WHERE project_id = ? AND view_type = ?", existingView.ProjectID.Int64, existingView.ViewType)
+	} else {
+		_, unsetErr = tx.Exec("UPDATE saved_views SET is_default = 0 WHERE project_id IS NULL AND view_type = ?", existingView.ViewType)
+	}
+	if unsetErr != nil {
+		tx.Rollback()
+		panic(middleware.NewUpdateError("saved view"))
+	}
+
+	if _, err = tx.Exec("UPDATE saved_views SET is_default = 1, updated_at = ? WHERE id = ?", now, id); err != nil {
+		tx.Rollback()
+		panic(middleware.NewUpdateError("saved view"))
+	}
+
+	if err = tx.Commit(); err != nil {
 		panic(middleware.NewUpdateError("saved view"))
 	}
 
@@ -553,5 +627,9 @@ func SetDefaultView(c *gin.Context) {
 		panic(middleware.NewFetchError("saved view"))
 	}
 
-	c.JSON(http.StatusOK, middleware.NewSuccessResponse(parseSavedView(&view)))
+	parsedView, parseErr := parseSavedView(&view)
+	if parseErr != nil {
+		panic(middleware.NewFetchError("saved view"))
+	}
+	c.JSON(http.StatusOK, middleware.NewSuccessResponse(parsedView))
 }

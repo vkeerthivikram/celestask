@@ -3,13 +3,13 @@ package handlers
 import (
 	"database/sql"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"time"
 
 	"github.com/celestask/server/internal/db"
 	"github.com/celestask/server/internal/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // TimeEntry represents a time entry record from the database
@@ -70,21 +70,6 @@ type ChildTimeBreakdown struct {
 	EntryCount int    `json:"entry_count"`
 }
 
-// generateTimeEntryUUID generates a simple UUID-like string
-func generateTimeEntryUUID() string {
-	const charset = "abcdef0123456789"
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	result := make([]byte, 36)
-	for i := 0; i < 36; i++ {
-		if i == 8 || i == 13 || i == 18 || i == 23 {
-			result[i] = '-'
-		} else {
-			result[i] = charset[r.Intn(len(charset))]
-		}
-	}
-	return string(result)
-}
-
 // calculateDurationUs calculates duration in microseconds between two times
 func calculateDurationUs(startTime, endTime time.Time) int64 {
 	duration := endTime.Sub(startTime)
@@ -96,7 +81,9 @@ func parseTime(timeStr string) (time.Time, error) {
 	return time.Parse(time.RFC3339Nano, timeStr)
 }
 
-// rowToTimeEntry converts a database row to a TimeEntry struct
+// rowToTimeEntry converts a database row to a TimeEntry struct.
+// The row must have been selected with the 13-column join that includes
+// person_name and person_email (see getTimeEntryByID).
 func rowToTimeEntry(row *sql.Row) (*TimeEntry, error) {
 	var entry TimeEntry
 	err := row.Scan(
@@ -111,6 +98,8 @@ func rowToTimeEntry(row *sql.Row) (*TimeEntry, error) {
 		&entry.IsRunning,
 		&entry.CreatedAt,
 		&entry.UpdatedAt,
+		&entry.PersonName,
+		&entry.PersonEmail,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -121,7 +110,8 @@ func rowToTimeEntry(row *sql.Row) (*TimeEntry, error) {
 	return &entry, nil
 }
 
-// rowsToTimeEntries converts multiple database rows to TimeEntry structs
+// rowsToTimeEntries converts multiple database rows to TimeEntry structs.
+// Each row is expected to have the 13 base columns (no extra joined columns).
 func rowsToTimeEntries(rows *sql.Rows) ([]TimeEntry, error) {
 	defer rows.Close()
 
@@ -140,23 +130,12 @@ func rowsToTimeEntries(rows *sql.Rows) ([]TimeEntry, error) {
 			&entry.IsRunning,
 			&entry.CreatedAt,
 			&entry.UpdatedAt,
+			&entry.PersonName,
+			&entry.PersonEmail,
 		)
 		if err != nil {
 			return nil, err
 		}
-
-		// Scan person info if available
-		var personName, personEmail sql.NullString
-		err = rows.Scan(&personName, &personEmail)
-		if err == nil {
-			if personName.Valid {
-				entry.PersonName = &personName.String
-			}
-			if personEmail.Valid {
-				entry.PersonEmail = &personEmail.String
-			}
-		}
-
 		entries = append(entries, entry)
 	}
 
@@ -347,11 +326,9 @@ func GetTaskTimeSummary(c *gin.Context) {
 			SELECT te.id, te.entity_type, te.entity_id, te.person_id, te.description,
 			       te.start_time, te.end_time, te.duration_us, te.is_running,
 			       te.created_at, te.updated_at,
-			       p.name as person_name, p.email as person_email,
-			       t.title as task_title
+			       p.name as person_name, p.email as person_email
 			FROM time_entries te
 			LEFT JOIN people p ON te.person_id = p.id
-			LEFT JOIN tasks t ON te.entity_id = t.id
 			WHERE te.entity_type = 'task' AND te.entity_id = ?
 		`, childID)
 		if err != nil {
@@ -448,17 +425,8 @@ func StartTaskTimer(c *gin.Context) {
 		return
 	}
 
-	// Stop any running timers for this task
-	stopRunningTimers(database, "task", taskID, "")
-
-	// Create new time entry
-	id := generateTimeEntryUUID()
-	now := time.Now()
-
-	_, err = database.Exec(`
-		INSERT INTO time_entries (id, entity_type, entity_id, person_id, description, start_time, is_running)
-		VALUES (?, 'task', ?, ?, ?, ?, 1)
-	`, id, taskID, req.PersonID, req.Description, now.Format(time.RFC3339Nano))
+	// Atomically stop existing timers and start a new one
+	id, err := startTimerAtomically(database, "task", taskID, req.PersonID, req.Description)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, middleware.NewCreateError("time entry"))
 		return
@@ -593,7 +561,7 @@ func CreateTaskTimeEntry(c *gin.Context) {
 		}
 	}
 
-	id := generateTimeEntryUUID()
+	id := uuid.New().String()
 
 	_, err = database.Exec(`
 		INSERT INTO time_entries (id, entity_type, entity_id, person_id, description, start_time, end_time, duration_us, is_running)
@@ -696,17 +664,8 @@ func StartProjectTimer(c *gin.Context) {
 		return
 	}
 
-	// Stop any running timers for this project
-	stopRunningTimers(database, "project", projectID, "")
-
-	// Create new time entry
-	id := generateTimeEntryUUID()
-	now := time.Now()
-
-	_, err = database.Exec(`
-		INSERT INTO time_entries (id, entity_type, entity_id, person_id, description, start_time, is_running)
-		VALUES (?, 'project', ?, ?, ?, ?, 1)
-	`, id, projectID, req.PersonID, req.Description, now.Format(time.RFC3339Nano))
+	// Atomically stop existing timers and start a new one
+	id, err := startTimerAtomically(database, "project", projectID, req.PersonID, req.Description)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, middleware.NewCreateError("time entry"))
 		return
@@ -841,7 +800,7 @@ func CreateProjectTimeEntry(c *gin.Context) {
 		}
 	}
 
-	id := generateTimeEntryUUID()
+	id := uuid.New().String()
 
 	_, err = database.Exec(`
 		INSERT INTO time_entries (id, entity_type, entity_id, person_id, description, start_time, end_time, duration_us, is_running)
@@ -1003,6 +962,68 @@ func DeleteTimeEntry(c *gin.Context) {
 	c.JSON(http.StatusOK, middleware.NewSuccessResponse(gin.H{"message": "Time entry deleted"}))
 }
 
+// startTimerAtomically stops any running timers for the entity and inserts
+// a new running entry, all in a single transaction.
+func startTimerAtomically(database *db.Database, entityType, entityID string, personID, description *string) (string, error) {
+	tx, err := database.Begin()
+	if err != nil {
+		return "", err
+	}
+
+	now := time.Now()
+
+	// Stop existing running timers inside the transaction
+	rows, err := tx.Query(`
+		SELECT id, start_time FROM time_entries
+		WHERE entity_type = ? AND entity_id = ? AND is_running = 1
+	`, entityType, entityID)
+	if err != nil {
+		tx.Rollback()
+		return "", err
+	}
+	type runningEntry struct {
+		id        string
+		startTime time.Time
+	}
+	var running []runningEntry
+	for rows.Next() {
+		var e runningEntry
+		if err := rows.Scan(&e.id, &e.startTime); err != nil {
+			rows.Close()
+			tx.Rollback()
+			return "", err
+		}
+		running = append(running, e)
+	}
+	rows.Close()
+
+	for _, e := range running {
+		durationUs := now.Sub(e.startTime).Microseconds()
+		if _, err := tx.Exec(`
+			UPDATE time_entries 
+			SET is_running = 0, end_time = ?, duration_us = ?, updated_at = ?
+			WHERE id = ?
+		`, now.Format(time.RFC3339Nano), durationUs, now.Format(time.RFC3339Nano), e.id); err != nil {
+			tx.Rollback()
+			return "", err
+		}
+	}
+
+	id := uuid.New().String()
+	if _, err := tx.Exec(`
+		INSERT INTO time_entries (id, entity_type, entity_id, person_id, description, start_time, is_running)
+		VALUES (?, ?, ?, ?, ?, ?, 1)
+	`, id, entityType, entityID, personID, description, now.Format(time.RFC3339Nano)); err != nil {
+		tx.Rollback()
+		return "", err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
 // stopRunningTimers stops all running timers for an entity, optionally excluding one
 func stopRunningTimers(database *db.Database, entityType, entityID, excludeID string) {
 	now := time.Now()
@@ -1048,4 +1069,156 @@ func stopRunningTimers(database *db.Database, entityType, entityID, excludeID st
 			fmt.Printf("Error stopping timer %s: %v\n", id, err)
 		}
 	}
+}
+
+// GetProjectTimeSummary returns a summary of time entries for a project
+func GetProjectTimeSummary(c *gin.Context) {
+projectID := c.Param("projectId")
+if projectID == "" {
+c.JSON(http.StatusBadRequest, middleware.NewValidationError("projectId is required"))
+return
+}
+
+databaseIface, exists := c.Get("database")
+if !exists {
+c.JSON(http.StatusInternalServerError, middleware.NewInternalError("Database not available"))
+return
+}
+database := databaseIface.(*db.Database)
+
+rows, err := database.Query(`
+SELECT te.id, te.entity_type, te.entity_id, te.person_id, te.description,
+       te.start_time, te.end_time, te.duration_us, te.is_running,
+       te.created_at, te.updated_at,
+       p.name as person_name, p.email as person_email
+FROM time_entries te
+LEFT JOIN people p ON te.person_id = p.id
+WHERE te.entity_type = 'project' AND te.entity_id = ?
+ORDER BY te.start_time DESC
+`, projectID)
+if err != nil {
+c.JSON(http.StatusInternalServerError, middleware.NewFetchError("time summary"))
+return
+}
+
+entries, err := scanTimeEntries(rows)
+if err != nil {
+c.JSON(http.StatusInternalServerError, middleware.NewFetchError("time summary"))
+return
+}
+
+var totalUs int64
+var hasRunningTimer bool
+var runningTimer *TimeEntry
+for _, e := range entries {
+if e.DurationUs != nil {
+totalUs += *e.DurationUs
+}
+if e.IsRunning == 1 {
+hasRunningTimer = true
+runningTimer = &e
+}
+}
+
+var currentSessionUs int64
+if runningTimer != nil {
+currentSessionUs = calculateDurationUs(runningTimer.StartTime, time.Now())
+}
+
+c.JSON(http.StatusOK, middleware.NewSuccessResponse(gin.H{
+"project_id":         projectID,
+"total_time_us":      totalUs,
+"current_session_us": currentSessionUs,
+"has_running_timer":  hasRunningTimer,
+"running_timer":      runningTimer,
+"entries":            entries,
+}))
+}
+
+// GetRunningTimers returns all currently running time entries
+func GetRunningTimers(c *gin.Context) {
+databaseIface, exists := c.Get("database")
+if !exists {
+c.JSON(http.StatusInternalServerError, middleware.NewInternalError("Database not available"))
+return
+}
+database := databaseIface.(*db.Database)
+
+rows, err := database.Query(`
+SELECT te.id, te.entity_type, te.entity_id, te.person_id, te.description,
+       te.start_time, te.end_time, te.duration_us, te.is_running,
+       te.created_at, te.updated_at,
+       p.name as person_name, p.email as person_email
+FROM time_entries te
+LEFT JOIN people p ON te.person_id = p.id
+WHERE te.is_running = 1
+ORDER BY te.start_time DESC
+`)
+if err != nil {
+c.JSON(http.StatusInternalServerError, middleware.NewFetchError("running timers"))
+return
+}
+
+entries, err := scanTimeEntries(rows)
+if err != nil {
+c.JSON(http.StatusInternalServerError, middleware.NewFetchError("running timers"))
+return
+}
+
+if entries == nil {
+entries = []TimeEntry{}
+}
+
+c.JSON(http.StatusOK, middleware.NewSuccessResponse(entries))
+}
+
+// StopAllTimers stops all currently running time entries and returns the count and IDs stopped
+func StopAllTimers(c *gin.Context) {
+databaseIface, exists := c.Get("database")
+if !exists {
+c.JSON(http.StatusInternalServerError, middleware.NewInternalError("Database not available"))
+return
+}
+database := databaseIface.(*db.Database)
+
+// Find all running entries
+rows, err := database.Query(`
+SELECT id, start_time FROM time_entries WHERE is_running = 1
+`)
+if err != nil {
+c.JSON(http.StatusInternalServerError, middleware.NewFetchError("running timers"))
+return
+}
+defer rows.Close()
+
+now := time.Now()
+var stoppedIDs []string
+
+for rows.Next() {
+var id string
+var startTime time.Time
+if err := rows.Scan(&id, &startTime); err != nil {
+continue
+}
+stoppedIDs = append(stoppedIDs, id)
+
+duration := calculateDurationUs(startTime, now)
+_, err = database.Exec(`
+UPDATE time_entries
+SET end_time = ?, duration_us = ?, is_running = 0, updated_at = ?
+WHERE id = ?
+`, now.Format(time.RFC3339Nano), duration, now.Format(time.RFC3339Nano), id)
+if err != nil {
+fmt.Printf("Error stopping timer %s: %v\n", id, err)
+}
+}
+
+if stoppedIDs == nil {
+stoppedIDs = []string{}
+}
+
+c.JSON(http.StatusOK, middleware.NewSuccessResponse(gin.H{
+"stopped_count": len(stoppedIDs),
+"stopped_ids":   stoppedIDs,
+}))
 }
