@@ -34,6 +34,25 @@ var tableNames = []string{
 	"pomodoro_sessions",
 }
 
+// tableColumns defines the allowed columns for each table to prevent SQL injection.
+// Only columns listed here can be used in import INSERT statements.
+var tableColumns = map[string]map[string]struct{}{
+	"projects": {"id": {}, "name": {}, "description": {}, "color": {}, "parent_project_id": {}, "owner_id": {}, "created_at": {}, "updated_at": {}},
+	"tasks":    {"id": {}, "project_id": {}, "parent_task_id": {}, "title": {}, "description": {}, "status": {}, "priority": {}, "assignee_id": {}, "due_date": {}, "start_date": {}, "end_date": {}, "progress_percent": {}, "estimated_duration_minutes": {}, "actual_duration_minutes": {}, "created_at": {}, "updated_at": {}},
+	"people":   {"id": {}, "name": {}, "email": {}, "company": {}, "designation": {}, "project_id": {}, "created_at": {}, "updated_at": {}},
+	"tags":     {"id": {}, "name": {}, "color": {}, "project_id": {}, "created_at": {}, "updated_at": {}},
+	"notes":    {"id": {}, "content": {}, "entity_type": {}, "entity_id": {}, "created_at": {}, "updated_at": {}},
+	"task_assignees":     {"id": {}, "task_id": {}, "person_id": {}, "role": {}, "created_at": {}},
+	"task_tags":          {"id": {}, "task_id": {}, "tag_id": {}, "created_at": {}},
+	"project_assignees":  {"id": {}, "project_id": {}, "person_id": {}, "role": {}, "created_at": {}},
+	"custom_fields":      {"id": {}, "name": {}, "field_type": {}, "project_id": {}, "options": {}, "required": {}, "sort_order": {}, "created_at": {}, "updated_at": {}},
+	"custom_field_values": {"id": {}, "task_id": {}, "custom_field_id": {}, "value": {}, "created_at": {}, "updated_at": {}},
+	"saved_views":    {"id": {}, "name": {}, "view_type": {}, "project_id": {}, "filters": {}, "sort_by": {}, "sort_order": {}, "is_default": {}, "created_at": {}, "updated_at": {}},
+	"time_entries":   {"id": {}, "entity_type": {}, "entity_id": {}, "person_id": {}, "description": {}, "start_time": {}, "end_time": {}, "duration_us": {}, "is_running": {}, "created_at": {}, "updated_at": {}},
+	"pomodoro_settings": {"id": {}, "work_duration": {}, "short_break_duration": {}, "long_break_duration": {}, "sessions_until_long_break": {}, "daily_goal": {}, "auto_start_breaks": {}, "auto_start_work": {}, "created_at": {}, "updated_at": {}},
+	"pomodoro_sessions":  {"id": {}, "session_type": {}, "started_at": {}, "ended_at": {}, "elapsed_us": {}, "completed": {}, "task_id": {}, "created_at": {}},
+}
+
 // ExportPayload is the JSON shape the client expects for export/import.
 // It matches the client's ImportPayload type: { version, exportedAt, data }.
 type ExportPayload struct {
@@ -335,6 +354,7 @@ func performSyncImport(database *db.Database, payload ExportPayload, mode string
 }
 
 // importTableRows inserts records into a table and returns per-table stats.
+// Column names are validated against a known allowlist to prevent SQL injection.
 func importTableRows(tx *sql.Tx, tableName string, records []map[string]interface{}, mode string) (ImportTableSummary, []ImportErrorDetail) {
 	summary := ImportTableSummary{}
 	var errorDetails []ImportErrorDetail
@@ -343,12 +363,20 @@ func importTableRows(tx *sql.Tx, tableName string, records []map[string]interfac
 		return summary, errorDetails
 	}
 
-	// Collect all unique column names from the records and sort them for
-	// deterministic ordering in the prepared statement.
+	// Get the allowlist for this table
+	allowedCols, ok := tableColumns[tableName]
+	if !ok {
+		// Unknown table – skip safely
+		return summary, errorDetails
+	}
+
+	// Collect all column names from the records, filtering against the allowlist.
 	columnSet := make(map[string]struct{})
 	for _, rec := range records {
 		for col := range rec {
-			columnSet[col] = struct{}{}
+			if _, allowed := allowedCols[col]; allowed {
+				columnSet[col] = struct{}{}
+			}
 		}
 	}
 	var columns []string
@@ -356,6 +384,10 @@ func importTableRows(tx *sql.Tx, tableName string, records []map[string]interfac
 		columns = append(columns, col)
 	}
 	sort.Strings(columns)
+
+	if len(columns) == 0 {
+		return summary, errorDetails
+	}
 
 	insertKeyword := "INSERT OR REPLACE"
 	if mode == "merge" {

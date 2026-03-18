@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/celestask/server/internal/db"
 	"github.com/celestask/server/internal/handlers"
@@ -86,14 +87,27 @@ func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 
-		// Allow localhost:12096 and 127.0.0.1:12096
-		allowedOrigins := []string{
-			"http://localhost:12096",
-			"http://127.0.0.1:12096",
+		// Allow origins configured via ALLOWED_ORIGINS env var (comma-separated),
+		// falling back to localhost defaults for local development.
+		allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+		var origins []string
+		if allowedOrigins != "" {
+			for _, o := range strings.Split(allowedOrigins, ",") {
+				o = strings.TrimSpace(o)
+				if o != "" {
+					origins = append(origins, o)
+				}
+			}
+		}
+		if len(origins) == 0 {
+			origins = []string{
+				"http://localhost:12096",
+				"http://127.0.0.1:12096",
+			}
 		}
 
 		isAllowed := false
-		for _, allowed := range allowedOrigins {
+		for _, allowed := range origins {
 			if origin == allowed {
 				isAllowed = true
 				break
@@ -104,7 +118,7 @@ func corsMiddleware() gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Origin", origin)
 		}
 
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		c.Header("Access-Control-Allow-Credentials", "true")
 

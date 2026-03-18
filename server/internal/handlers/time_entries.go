@@ -3,13 +3,13 @@ package handlers
 import (
 	"database/sql"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"time"
 
 	"github.com/celestask/server/internal/db"
 	"github.com/celestask/server/internal/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // TimeEntry represents a time entry record from the database
@@ -68,21 +68,6 @@ type ChildTimeBreakdown struct {
 	TaskTitle  string `json:"task_title"`
 	TotalUs    int64  `json:"total_us"`
 	EntryCount int    `json:"entry_count"`
-}
-
-// generateTimeEntryUUID generates a simple UUID-like string
-func generateTimeEntryUUID() string {
-	const charset = "abcdef0123456789"
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	result := make([]byte, 36)
-	for i := 0; i < 36; i++ {
-		if i == 8 || i == 13 || i == 18 || i == 23 {
-			result[i] = '-'
-		} else {
-			result[i] = charset[r.Intn(len(charset))]
-		}
-	}
-	return string(result)
 }
 
 // calculateDurationUs calculates duration in microseconds between two times
@@ -452,7 +437,7 @@ func StartTaskTimer(c *gin.Context) {
 	stopRunningTimers(database, "task", taskID, "")
 
 	// Create new time entry
-	id := generateTimeEntryUUID()
+	id := uuid.New().String()
 	now := time.Now()
 
 	_, err = database.Exec(`
@@ -593,7 +578,7 @@ func CreateTaskTimeEntry(c *gin.Context) {
 		}
 	}
 
-	id := generateTimeEntryUUID()
+	id := uuid.New().String()
 
 	_, err = database.Exec(`
 		INSERT INTO time_entries (id, entity_type, entity_id, person_id, description, start_time, end_time, duration_us, is_running)
@@ -700,7 +685,7 @@ func StartProjectTimer(c *gin.Context) {
 	stopRunningTimers(database, "project", projectID, "")
 
 	// Create new time entry
-	id := generateTimeEntryUUID()
+	id := uuid.New().String()
 	now := time.Now()
 
 	_, err = database.Exec(`
@@ -841,7 +826,7 @@ func CreateProjectTimeEntry(c *gin.Context) {
 		}
 	}
 
-	id := generateTimeEntryUUID()
+	id := uuid.New().String()
 
 	_, err = database.Exec(`
 		INSERT INTO time_entries (id, entity_type, entity_id, person_id, description, start_time, end_time, duration_us, is_running)

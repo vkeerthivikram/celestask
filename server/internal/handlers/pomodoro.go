@@ -899,8 +899,8 @@ func GetPomodoroStats(c *gin.Context) {
 		SELECT
 			COALESCE(COUNT(*), 0),
 			COALESCE(SUM(elapsed_us), 0),
-			SUM(CASE WHEN session_type = 'short_break' THEN 1 ELSE 0 END),
-			SUM(CASE WHEN session_type = 'long_break' THEN 1 ELSE 0 END)
+			COALESCE(SUM(CASE WHEN session_type = 'short_break' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN session_type = 'long_break' THEN 1 ELSE 0 END), 0)
 		FROM pomodoro_sessions
 		WHERE session_type IN ('short_break', 'long_break')
 		  AND completed = 1

@@ -195,8 +195,13 @@ func UpdateTag(c *gin.Context) {
 	updates := 0
 
 	if req.Name != nil {
+		trimmedName := strings.TrimSpace(*req.Name)
+		if len(trimmedName) == 0 {
+			c.JSON(http.StatusBadRequest, middleware.NewValidationError("Tag name cannot be blank"))
+			return
+		}
 		query += "name = ?"
-		args = append(args, *req.Name)
+		args = append(args, trimmedName)
 		updates++
 	}
 
