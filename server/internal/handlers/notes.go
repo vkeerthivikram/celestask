@@ -14,12 +14,12 @@ import (
 
 // Note represents a note in the database
 type Note struct {
-	ID         string         `json:"id"`
-	Content    string         `json:"content"`
-	EntityType string         `json:"entity_type"`
-	EntityID   string         `json:"entity_id"`
-	CreatedAt  sql.NullString `json:"created_at"`
-	UpdatedAt  sql.NullString `json:"updated_at"`
+	ID         string  `json:"id"`
+	Content    string  `json:"content"`
+	EntityType string  `json:"entity_type"`
+	EntityID   string  `json:"entity_id"`
+	CreatedAt  *string `json:"created_at"`
+	UpdatedAt  *string `json:"updated_at"`
 }
 
 // Valid entity types for notes
@@ -77,6 +77,10 @@ func GetNotes(c *gin.Context) {
 			WHERE entity_type = ? AND entity_id = ? 
 			ORDER BY created_at DESC
 		`, entityType, entityID)
+	} else if entityType != "" || entityID != "" {
+		// Reject half-specified filters
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("entity_type and entity_id must both be provided together"))
+		return
 	} else {
 		// Return all notes if no filter provided
 		rows, err = database.Query(`
@@ -171,6 +175,13 @@ func CreateNote(c *gin.Context) {
 	var req CreateNoteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, middleware.NewValidationError("Invalid request body"))
+		return
+	}
+
+	// Trim and validate content
+	req.Content = strings.TrimSpace(req.Content)
+	if req.Content == "" {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("Note content cannot be blank"))
 		return
 	}
 
@@ -277,12 +288,17 @@ func UpdateNote(c *gin.Context) {
 
 	// Update only if content is provided
 	if req.Content != "" {
+		trimmed := strings.TrimSpace(req.Content)
+		if trimmed == "" {
+			c.JSON(http.StatusBadRequest, middleware.NewValidationError("Note content cannot be blank"))
+			return
+		}
 		_, err = database.Exec(`
 			UPDATE notes 
 			SET content = ?, 
 				updated_at = CURRENT_TIMESTAMP 
 			WHERE id = ?
-		`, strings.TrimSpace(req.Content), id)
+		`, trimmed, id)
 	} else {
 		_, err = database.Exec(`
 			UPDATE notes 

@@ -364,20 +364,25 @@ func GetTask(c *gin.Context) {
 		FROM people p 
 		JOIN task_assignees ta ON p.id = ta.person_id 
 		WHERE ta.task_id = ?`, taskID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, middleware.NewFetchError("task assignees"))
+		return
+	}
 	var coAssignees []PersonWithRole
-	if err == nil {
-		defer coAssigneesRows.Close()
-		for coAssigneesRows.Next() {
-			var pwr PersonWithRole
-			var role, assignmentID string
-			coAssigneesRows.Scan(
-				&pwr.ID, &pwr.Name, &pwr.Email, &pwr.Company, &pwr.Designation,
-				&pwr.ProjectID, &pwr.CreatedAt, &pwr.UpdatedAt, &role, &assignmentID,
-			)
-			pwr.Role = role
-			pwr.AssignmentID = assignmentID
-			coAssignees = append(coAssignees, pwr)
+	defer coAssigneesRows.Close()
+	for coAssigneesRows.Next() {
+		var pwr PersonWithRole
+		var role, assignmentID string
+		if err := coAssigneesRows.Scan(
+			&pwr.ID, &pwr.Name, &pwr.Email, &pwr.Company, &pwr.Designation,
+			&pwr.ProjectID, &pwr.CreatedAt, &pwr.UpdatedAt, &role, &assignmentID,
+		); err != nil {
+			c.JSON(http.StatusInternalServerError, middleware.NewFetchError("task assignees"))
+			return
 		}
+		pwr.Role = role
+		pwr.AssignmentID = assignmentID
+		coAssignees = append(coAssignees, pwr)
 	}
 
 	// Get tags
@@ -386,14 +391,19 @@ func GetTask(c *gin.Context) {
 		FROM tags tg 
 		JOIN task_tags tt ON tg.id = tt.tag_id 
 		WHERE tt.task_id = ?`, taskID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, middleware.NewFetchError("task tags"))
+		return
+	}
 	var tags []Tag
-	if err == nil {
-		defer tagsRows.Close()
-		for tagsRows.Next() {
-			var t Tag
-			tagsRows.Scan(&t.ID, &t.Name, &t.Color, &t.ProjectID, &t.CreatedAt, &t.UpdatedAt)
-			tags = append(tags, t)
+	defer tagsRows.Close()
+	for tagsRows.Next() {
+		var t Tag
+		if err := tagsRows.Scan(&t.ID, &t.Name, &t.Color, &t.ProjectID, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			c.JSON(http.StatusInternalServerError, middleware.NewFetchError("task tags"))
+			return
 		}
+		tags = append(tags, t)
 	}
 
 	taskWithRelations := TaskWithRelations{
@@ -451,6 +461,16 @@ func CreateTask(c *gin.Context) {
 	progress := req.ProgressPercent
 	if progress < 0 || progress > 100 {
 		c.JSON(http.StatusBadRequest, middleware.NewValidationError("Progress percent must be between 0 and 100"))
+		return
+	}
+
+	// Reject negative duration values
+	if req.EstimatedDurationMinutes < 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("estimated_duration_minutes cannot be negative"))
+		return
+	}
+	if req.ActualDurationMinutes < 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("actual_duration_minutes cannot be negative"))
 		return
 	}
 
@@ -600,6 +620,16 @@ func UpdateTask(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, middleware.NewValidationError("Progress percent must be between 0 and 100"))
 			return
 		}
+	}
+
+	// Reject negative duration values
+	if req.EstimatedDurationMinutes != nil && *req.EstimatedDurationMinutes < 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("estimated_duration_minutes cannot be negative"))
+		return
+	}
+	if req.ActualDurationMinutes != nil && *req.ActualDurationMinutes < 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("actual_duration_minutes cannot be negative"))
+		return
 	}
 
 	// Build update query dynamically

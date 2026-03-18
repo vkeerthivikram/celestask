@@ -9,12 +9,16 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/celestask/server/internal/db"
 	"github.com/celestask/server/internal/middleware"
 	"github.com/gin-gonic/gin"
 )
+
+// importMu prevents two concurrent import operations from interleaving writes.
+var importMu sync.Mutex
 
 // Table names to export/import
 var tableNames = []string{
@@ -259,6 +263,13 @@ func PostImport(c *gin.Context) {
 		return
 	}
 
+	// Reject a second concurrent import
+	if !importMu.TryLock() {
+		c.JSON(http.StatusConflict, middleware.NewErrorResponse("IMPORT_IN_PROGRESS", "Another import is already running"))
+		return
+	}
+	defer importMu.Unlock()
+
 	result, importErr := performSyncImport(database, payload, mode)
 	if importErr != nil {
 		c.JSON(http.StatusInternalServerError, middleware.NewErrorResponse(
@@ -280,19 +291,17 @@ func performSyncImport(database *db.Database, payload ExportPayload, mode string
 		ImportedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	// Disable foreign keys for the duration of the import
-	if _, err := database.Exec("PRAGMA foreign_keys = OFF"); err != nil {
-		return nil, fmt.Errorf("failed to disable foreign keys: %v", err)
-	}
-	defer func() {
-		if _, err := database.Exec("PRAGMA foreign_keys = ON"); err != nil {
-			fmt.Printf("Warning: failed to re-enable foreign keys: %v\n", err)
-		}
-	}()
-
+	// Begin the transaction first, then disable foreign keys on the same connection.
 	tx, err := database.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %v", err)
+	}
+
+	// Disable foreign keys on the transaction's connection so the constraint is
+	// relaxed for the duration of the import without affecting other connections.
+	if _, err := tx.Exec("PRAGMA foreign_keys = OFF"); err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("failed to disable foreign keys: %v", err)
 	}
 
 	if mode == "replace" {

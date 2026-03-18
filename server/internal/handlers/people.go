@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 
 	"github.com/celestask/server/internal/db"
 	"github.com/celestask/server/internal/middleware"
@@ -12,14 +13,14 @@ import (
 
 // Person represents a person in the system
 type Person struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	Email       sql.NullString `json:"email"`
-	Company     sql.NullString `json:"company"`
-	Designation sql.NullString `json:"designation"`
-	ProjectID   sql.NullInt64  `json:"project_id"`
-	CreatedAt   string         `json:"created_at"`
-	UpdatedAt   string         `json:"updated_at"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Email       *string `json:"email"`
+	Company     *string `json:"company"`
+	Designation *string `json:"designation"`
+	ProjectID   *int64  `json:"project_id"`
+	CreatedAt   string  `json:"created_at"`
+	UpdatedAt   string  `json:"updated_at"`
 }
 
 // CreatePersonRequest represents the request body for creating a person
@@ -145,6 +146,7 @@ func CreatePerson(c *gin.Context) {
 	}
 
 	// Validate name is not empty
+	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
 		c.JSON(http.StatusBadRequest, middleware.NewValidationError("Person name is required"))
 		return
@@ -256,8 +258,13 @@ func UpdatePerson(c *gin.Context) {
 	hasUpdates := false
 
 	if req.Name != nil {
+		trimmedName := strings.TrimSpace(*req.Name)
+		if trimmedName == "" {
+			c.JSON(http.StatusBadRequest, middleware.NewValidationError("Person name cannot be blank"))
+			return
+		}
 		query += "name = ?"
-		args = append(args, *req.Name)
+		args = append(args, trimmedName)
 		hasUpdates = true
 	}
 

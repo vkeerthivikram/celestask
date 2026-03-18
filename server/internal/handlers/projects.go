@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -266,8 +268,12 @@ func UpdateProject(c *gin.Context) {
 
 	var req UpdateProjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		// If no body, just return the project
-		c.JSON(http.StatusOK, middleware.NewSuccessResponse(existingProject))
+		// Only treat a genuinely empty body as a no-op update
+		if errors.Is(err, io.EOF) {
+			c.JSON(http.StatusOK, middleware.NewSuccessResponse(existingProject))
+			return
+		}
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("Invalid request body"))
 		return
 	}
 

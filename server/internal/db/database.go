@@ -17,12 +17,12 @@ func InitDB() (*Database, error) {
 	// Get the directory for the database file
 	dbDir := os.Getenv("DB_DIR")
 	if dbDir == "" {
-		// Default to a data directory relative to the executable
-		exeDir, err := os.Getwd()
+		// Default to a data directory relative to the current working directory
+		cwd, err := os.Getwd()
 		if err != nil {
-			exeDir = "."
+			cwd = "."
 		}
-		dbDir = filepath.Join(exeDir, "data")
+		dbDir = filepath.Join(cwd, "data")
 	}
 
 	// Create directory if it doesn't exist
@@ -32,20 +32,12 @@ func InitDB() (*Database, error) {
 
 	dbPath := filepath.Join(dbDir, "celestask.db")
 
-	// Open database connection
-	db, err := sql.Open("sqlite", dbPath)
+	// Open database connection.
+	// _pragma=foreign_keys%3Don enables FK enforcement on every new connection
+	// in the pool, not just the first one (PRAGMA is per-connection in SQLite).
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=foreign_keys%3Don&_pragma=journal_mode%3Dwal&_pragma=busy_timeout%3D5000")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
-	// Configure SQLite pragmas for better performance
-	_, err = db.Exec(`
-		PRAGMA journal_mode = WAL;
-		PRAGMA foreign_keys = ON;
-		PRAGMA busy_timeout = 5000;
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to configure database pragmas: %w", err)
 	}
 
 	// Test the connection

@@ -230,6 +230,15 @@ func CreateCustomField(c *gin.Context) {
 		return
 	}
 
+	// Validate project_id if provided
+	if req.ProjectID != nil && *req.ProjectID != 0 {
+		var projExists bool
+		if err := database.QueryRow("SELECT 1 FROM projects WHERE id = ?", *req.ProjectID).Scan(&projExists); err != nil {
+			c.JSON(http.StatusBadRequest, middleware.NewValidationError("Project not found"))
+			return
+		}
+	}
+
 	id := uuid.New().String()
 	sortOrder := req.SortOrder
 	if sortOrder == 0 {
@@ -367,6 +376,12 @@ func UpdateCustomField(c *gin.Context) {
 		if *req.ProjectID == 0 {
 			projectID = sql.NullInt64{Valid: false}
 		} else {
+			// Validate project exists
+			var projExists bool
+			if err := database.QueryRow("SELECT 1 FROM projects WHERE id = ?", *req.ProjectID).Scan(&projExists); err != nil {
+				c.JSON(http.StatusBadRequest, middleware.NewValidationError("Project not found"))
+				return
+			}
 			projectID = sql.NullInt64{Int64: int64(*req.ProjectID), Valid: true}
 		}
 	}
@@ -374,6 +389,12 @@ func UpdateCustomField(c *gin.Context) {
 	options := existingOptions
 	if req.Options != nil {
 		options = req.Options
+	}
+
+	// Re-run select/multiselect invariant after computing the final field_type
+	if (fieldType == "select" || fieldType == "multiselect") && len(options) == 0 {
+		c.JSON(http.StatusBadRequest, middleware.NewValidationError("Options are required for select/multiselect fields"))
+		return
 	}
 
 	required := existingRequired
