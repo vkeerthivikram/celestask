@@ -9,13 +9,16 @@
 # Variables
 NODE := node
 NPM := npm
+GO := go
 DB_FILE := server/data/celestask.db
 GO_SERVER_DIR := ../celestask-go-backend/server
 
 # Install all dependencies (root + server + client)
 install:
 	@echo "📦 Installing all dependencies..."
-	$(NPM) run install:all
+	$(NPM) install
+	cd client && $(NPM) install
+	cd server && $(GO) mod download
 	@echo "✅ Installation complete!"
 
 # Start development servers (both frontend and backend)
@@ -48,26 +51,28 @@ build:
 	$(NPM) run build
 	@echo "✅ Build complete!"
 
-# Clean node_modules from all directories
+# Remove node_modules and Go build artifacts from all directories
 clean:
-	@echo "🧹 Cleaning node_modules..."
+	@echo "🧹 Cleaning node_modules and build artifacts..."
 	@if [ -d "node_modules" ]; then rm -rf node_modules; fi
-	@if [ -d "server/node_modules" ]; then rm -rf server/node_modules; fi
 	@if [ -d "client/node_modules" ]; then rm -rf client/node_modules; fi
+	@if [ -d "server/node_modules" ]; then rm -rf server/node_modules; fi
+	@if [ -f "server/celestask-server" ]; then rm -f server/celestask-server; fi
 	@echo "✅ Clean complete!"
 
 # Clean and reinstall everything
 reinstall: clean
 	@echo "🔄 Reinstalling all dependencies..."
-	$(NPM) run install:all
+	$(NPM) install
+	cd client && $(NPM) install
+	cd server && $(GO) mod download
 	@echo "✅ Reinstallation complete!"
 
-# Delete the SQLite database and reseed
+# Delete the SQLite database (Go server will recreate it)
 db-reset:
 	@echo "🗃️  Resetting database..."
-	@if [ -f "$(DB_FILE)" ]; then rm -f $(DB_FILE); echo "   Database deleted"; fi
-	@cd server && $(NPM) run seed
-	@echo "✅ Database reset complete!"
+	@if [ -f "$(DB_FILE)" ]; then rm -f $(DB_FILE); echo "   Database deleted"; else echo "   No database file found"; fi
+	@echo "✅ Database reset complete! Run 'make server' to recreate."
 
 # Display available commands
 help:
@@ -82,15 +87,5 @@ help:
 	@echo "  make client        - Start frontend dev server only"
 	@echo "  make server-build  - Build Go backend binary"
 	@echo "  make build         - Build frontend for production"
-	@echo "  make clean         - Remove node_modules from all directories"
+	@echo "  make clean         - Remove node_modules and build artifacts"
 	@echo "  make reinstall     - Clean and reinstall everything"
-	@echo "  make db-reset      - Delete the SQLite database and reseed"
-	@echo "  make help          - Display this help message"
-	@echo ""
-	@echo "Examples:"
-	@echo "  make install       # First time setup"
-	@echo "  make dev          # Start developing"
-	@echo "  make server       # Start Go backend server"
-	@echo "  make server-build # Build Go server binary"
-	@echo "  make db-reset     # Reset database to fresh state"
-	@echo ""

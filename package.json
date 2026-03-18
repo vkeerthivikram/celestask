@@ -7,8 +7,8 @@
     "node": ">=22 <25"
   },
   "scripts": {
-    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
-    "server": "cd server && npm run dev",
+    "install:all": "npm install && cd server && go mod download && cd ../client && npm install",
+    "server": "cd server && go run .",
     "client": "cd client && npm run dev",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "start": "concurrently \"npm run server\" \"npm run client\""
